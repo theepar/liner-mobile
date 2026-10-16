@@ -1,117 +1,165 @@
-# Liner Mobile 🎵
-
 <div align="center">
 
-**Modern mobile music streaming client with syllable-synced lyrics and reactive dynamic visuals.**  
-*Adapted for mobile UX from the official [Liner Desktop](https://github.com/tryliner/desktop).*
+# Liner Mobile
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.47-02569B?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
-[![Dart](https://img.shields.io/badge/Dart-3.13-0175C2?style=flat-square&logo=dart&logoColor=white)](https://dart.dev)
-[![State](https://img.shields.io/badge/State-Riverpod_2.6-purple?style=flat-square)](https://riverpod.dev)
-[![License: Source-Available](https://img.shields.io/badge/License-Source--Available-blueviolet?style=flat-square)](./LICENSE)
+**Modern mobile music streaming player with syllable-synced lyrics and reactive dynamic visuals.**
+
+[![Flutter](https://img.shields.io/badge/Flutter-3.32+-02569B?style=flat-square&logo=flutter&logoColor=black&labelColor=white)](https://flutter.dev)
+[![Dart](https://img.shields.io/badge/Dart-3.5+-0175C2?style=flat-square&logo=dart&logoColor=black&labelColor=white)](https://dart.dev)
+[![Riverpod](https://img.shields.io/badge/Riverpod-2.6-8A2BE2?style=flat-square&logo=flutter&logoColor=black&labelColor=white)](https://riverpod.dev)
+[![just_audio](https://img.shields.io/badge/just_audio-0.9-4CAF50?style=flat-square&logo=googleplay&logoColor=black&labelColor=white)](https://pub.dev/packages/just_audio)
+[![Android & iOS](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-3DDC84?style=flat-square&logo=android&logoColor=black&labelColor=white)](https://flutter.dev)
+[![License: Source-Available](https://img.shields.io/badge/License-Source--Available-blueviolet?style=flat-square&labelColor=white)](./LICENSE)
+
+[Features](#features) •
+[Architecture](#architecture) •
+[Ecosystem Integration](#ecosystem-integration) •
+[Getting Started](#getting-started) •
+[Testing](#testing) •
+[Building](#building) •
+[Contributing](#contributing) •
+[License](#license)
 
 </div>
 
 ---
 
-## ✨ Features
-
-- **Syllable-Synced & Line-Synced Lyrics (Liner's signature feature)**:
-  - Real-time word-level karaoke highlighting using exact millisecond timing.
-  - Interactive auto-scrolling with smooth easing to keep the active line centered.
-  - Tap on any lyric line to instantly seek audio to that timestamp.
-- **Reactive Dynamic Visuals**:
-  - Animated ambient gradient mesh background derived from album cover art.
-  - Reacts smoothly to playback state (subtle pulsing glow).
-- **Time-of-Day Ambient Header**:
-  - Dynamic ambient header glow matching morning, afternoon, evening, and night moods.
-- **Deep OLED Dark Theme**:
-  - High-contrast true-black OLED canvas (`#000000`), elevated card surfaces (`#141414`), and vibrant Liner Red accent (`#FF3B3B`).
-- **Full Playback & Audio Controls**:
-  - Seamless audio streaming powered by `just_audio`.
-  - **Pitch Shift & Tempo Controls**: Adjust playback speed (0.5x–2.0x) and musical pitch (0.5x–1.5x) like Liner Desktop.
-  - Shuffle, Repeat (Off, All, One), Queue management, and Like track support.
-- **Persistent Mini Player**:
-  - Docked floating bar above the navigation bar with track info, play/pause, like, and 2px linear scrubber.
-  - Smooth hero-style slide transition to Fullscreen Player.
-- **Dual-Endpoint API Failover**:
-  - Automatically probes the primary Cloudflare API (`https://api.tryliner.fun`) with fallback to Polish Edge Relay (`http://edge.tryliner.fun:10518`).
-  - Built-in graceful offline demo catalog so the app is always functional.
+## Features
+- **Syllable-Synced Lyrics**: Real-time word-level synchronized lyrics parsing matching upstream word-level specifications, with smooth active line auto-centering and instant interactive seek on tap.
+- **Dynamic Visuals**: Reactive ambient mesh gradients derived from track cover art with live playback pulsing.
+- **Persistent Mini Player**: Floating playback bar with quick controls, scrubbing progress indicator, and smooth slide navigation to fullscreen player.
+- **Audio Control & DSP**: Pitch shifting (0.5x to 1.5x) and tempo scaling (0.5x to 2.0x) powered by `just_audio`.
+- **Ecosystem Compatibility**: Universal share links (`https://link.tryliner.fun/track?id=...`), deep links (`liner://track?id=...`), and cover art failover proxy (`covers.tryliner.fun`).
 
 ---
 
-## 📱 Architecture & Folder Structure
+> [!NOTE]
+> Liner Mobile client connects to the official Liner API backend for music catalog, streaming playback, and synchronized lyrics.
 
+---
+
+## Architecture
 ```
 liner-mobile/
 ├── lib/
-│   ├── main.dart                       # App entry point, Riverpod ProviderScope, Dark UI overlay
+│   ├── main.dart                      # App entry point, Riverpod ProviderScope & system UI styling
 │   ├── core/
 │   │   ├── api/
-│   │   │   └── api_client.dart         # Dual-endpoint Dio client with health probe & fallbacks
+│   │   │   ├── api_client.dart        # Dual-endpoint failover (Cloudflare & Polish relay) with visitorData warmup
+│   │   │   └── api_constants.dart     # Upstream API routes and base URLs
 │   │   ├── models/
-│   │   │   ├── track.dart              # Track, Playlist, Artist, LyricLine, LyricWord models
-│   │   │   └── player_state.dart       # PlaybackStatus, LinerRepeatMode, PlayerStateData
-│   │   ├── theme/
-│   │   │   └── app_theme.dart          # Liner OLED Dark & Light tokens and typography
-│   │   └── utils/
-│   │       └── lyric_parser.dart       # Richsync syllable JSON, LRC, and MXM subtitle parser
-│   ├── services/
-│   │   └── audio_player_service.dart   # just_audio playback manager, queue, streams, pitch/speed
+│   │   │   ├── lyric_line.dart        # Line and syllable timecode data contracts
+│   │   │   └── track.dart             # Track entity with tryliner cover proxy fallback
+│   │   ├── services/
+│   │   │   ├── audio_handler.dart     # Background playback & lockscreen notification integration
+│   │   │   └── lyric_parser.dart      # LRC & word-level syllable grouping parser
+│   │   └── theme/
+│   │       └── app_theme.dart         # High-contrast OLED dark theme & typography tokens
 │   ├── providers/
-│   │   ├── player_provider.dart        # Riverpod StateNotifier for player state & controls
-│   │   └── music_provider.dart         # Providers for popular tracks, daily mixes, search & settings
+│   │   ├── music_provider.dart        # Home catalog, query debounce & search filters
+│   │   └── player_provider.dart       # Playback state machine, repeat, shuffle & speed/pitch DSP
 │   └── ui/
 │       ├── navigation/
-│       │   └── main_navigation_shell.dart # Mobile bottom navigation (Home, Search, Library, Settings) + MiniPlayer
+│       │   └── main_navigation_shell.dart # Bottom navigation with docked mini-player
 │       ├── screens/
-│       │   ├── home/
-│       │   │   └── home_screen.dart     # Ambient time glow, Jump Back In, Daily Mixes, Trending Now
-│       │   ├── search/
-│       │   │   └── search_screen.dart   # Instant search across tracks & categories
-│       │   ├── library/
-│       │   │   └── library_screen.dart  # Filter tabs, Liked Songs banner, playlists & artists
-│       │   ├── player/
-│       │   │   ├── fullscreen_player.dart  # Fullscreen player with mesh background & controls
-│       │   │   └── lyrics_view.dart        # Syllable-synced karaoke text view
-│       │   └── settings/
-│       │       └── settings_screen.dart # API endpoint switch, audio quality, cache clear
-│       └── widgets/
-│           ├── mini_player.dart         # Docked bottom mini player
-│           ├── song_card.dart           # Grid / horizontal carousel cards
-│           ├── song_tile.dart           # Ranked track tile with like button
-│           └── dynamic_mesh_background.dart # Animated ambient visualizer mesh
-└── test/
-    └── widget_test.dart                 # LyricParser and active line sync tests
+│       │   ├── home/                  # Feed, greeting glow & pill category filters
+│       │   ├── library/               # Favorites and cached tracks
+│       │   ├── player/                # Fullscreen player, dynamic mesh background & lyrics view
+│       │   └── settings/              # Audio settings, endpoint switch & account sheet
+│       └── widgets/                   # SongTile, SongCard, MiniPlayer, DynamicMeshBackground
+├── test/
+│   └── widget_test.dart               # Parser and playback unit tests
+├── pubspec.yaml
+└── analysis_options.yaml
 ```
 
 ---
 
-## 🚀 Getting Started
-
 ### Prerequisites
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (>= 3.0.0)
-- Android Studio / Xcode / VS Code with Flutter extension
-- Connected physical device or emulator
+- **Flutter SDK** `3.32+` (Channel stable)
+- **Dart SDK** `3.5+`
+- Android Studio / Xcode for device deployment or emulator
 
-### Installation & Run
+---
 
+### Setup
 ```bash
-# 1. Navigate to directory
-cd D:\Kodingan\liner-mobile
+# 1. Clone repository
+git clone https://github.com/theepar/liner-mobile.git
+cd liner-mobile
 
-# 2. Get dependencies
+# 2. Install dependencies
 flutter pub get
+```
 
-# 3. Run unit tests
-flutter test
+---
 
-# 4. Launch app on device / emulator
+### Running in Development
+```bash
+# Run on connected device or emulator
 flutter run
 ```
 
 ---
 
-## 🤝 Contribution to Liner
+## Testing
+```bash
+# Run static analysis
+dart analyze lib test
 
-This mobile app is designed to accompany the official desktop app at [tryliner/desktop](https://github.com/tryliner/desktop). All endpoints, data models, and theme tokens are designed 1:1 with the desktop client.
+# Run unit and widget test suite
+flutter test
+```
+
+---
+
+## Building
+```bash
+# Build Android APK (Release)
+flutter build apk --release
+
+# Build Android App Bundle (for Google Play distribution)
+flutter build appbundle --release
+
+# Build iOS application (macOS required)
+flutter build ios --release
+```
+
+Compiled distributions will be placed in the `build/app/outputs/` directory.
+
+---
+
+## Ecosystem Integration
+Liner Mobile is designed to interoperate with the official Liner ecosystem:
+- **`tryliner/covers`**: Automatic fallback to `https://covers.tryliner.fun/{id}` when external CDN images are blocked or unavailable.
+- **`tryliner/link`**: Handles universal links (`https://link.tryliner.fun/track?id={id}`) and custom scheme (`liner://track?id={id}`).
+- **`tryliner/desktop`**: Word-level syllable grouping matching the official desktop implementation for accurate karaoke highlights.
+- **Session Warmup**: YouTube visitor session data warmup (`visitorData`) to maintain reliable streaming access.
+
+---
+
+## Contributing
+Contributions, bug fixes, and feature enhancements are welcome:
+
+1. Fork the repository.
+2. Create your feature branch (`git checkout -b feat/my-feature`).
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`).
+4. Push to your branch (`git push origin feat/my-feature`).
+5. Open a Pull Request to `theepar/liner-mobile` or the upstream project.
+
+---
+
+## Special Thanks
+- [Liner Project Contributors](https://github.com/tryliner) — Original desktop application and architecture inspiration.
+- [`just_audio`](https://pub.dev/packages/just_audio) & [`audio_service`](https://pub.dev/packages/audio_service) — High performance mobile audio playback engine.
+- [Flutter Riverpod](https://riverpod.dev) — Reactive state management architecture.
+
+---
+
+## License
+Liner Mobile is distributed under the **Liner Source-Available & Non-Commercial Contribution License**.
+
+- **Allowed**: Personal non-commercial usage, local builds, and upstream contributions.
+- **Prohibited**: Commercial distribution, public competing forks, or extracting core algorithms for third-party products.
+
+See [LICENSE](./LICENSE) for details.
