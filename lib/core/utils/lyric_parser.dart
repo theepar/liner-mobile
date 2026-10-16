@@ -1,86 +1,89 @@
 import 'dart:convert';
-import '../models/track.dart';
+
+import '../models/json_helpers.dart';
+import '../models/lyric.dart';
 
 class LyricParser {
+  /// Parses time-synced lyrics: Richsync JSON or LRC (optionally with
+  /// word-level `<mm:ss.xx>` tags). Text without timing yields no lines.
   static List<LyricLine> parse(String raw, {int songDurationMs = 0}) {
-    if (raw.trim().isEmpty) return [];
-
     final trimmed = raw.trim();
+    if (trimmed.isEmpty) return [];
 
     if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
       final jsonLines = _tryParseJson(trimmed);
-      if (jsonLines != null && jsonLines.isNotEmpty) {
-        return jsonLines;
-      }
+      if (jsonLines != null && jsonLines.isNotEmpty) return jsonLines;
     }
 
-    final lrcLines = _tryParseLrc(trimmed, songDurationMs);
-    if (lrcLines.isNotEmpty) {
-      return lrcLines;
-    }
-
-    return _parsePlainText(trimmed, songDurationMs);
+    return _tryParseLrc(trimmed, songDurationMs);
   }
 
   static List<LyricLine>? _tryParseJson(String raw) {
+    final Object? decoded;
     try {
-      final dynamic decoded = jsonDecode(raw);
-      if (decoded is List) {
-        if (decoded.isNotEmpty && decoded.first is Map && (decoded.first['ts'] != null || decoded.first['time'] != null)) {
-          final List<LyricLine> result = [];
-          for (int i = 0; i < decoded.length; i++) {
-            final item = decoded[i] as Map<String, dynamic>;
-            final double ts = (item['ts'] as num?)?.toDouble() ??
-                ((item['time'] is Map ? item['time']['total'] : item['time']) as num?)?.toDouble() ??
-                0.0;
-            final double te = (item['te'] as num?)?.toDouble() ?? ts + 3.0;
+      decoded = jsonDecode(raw);
+    } on FormatException {
+      return null;
+    }
 
-            final int startMs = (ts * 1000).round();
-            final int endMs = (te * 1000).round();
+    final entries = asList(decoded);
+    final first = entries == null || entries.isEmpty
+        ? null
+        : asMap(entries.first);
+    if (entries == null ||
+        first == null ||
+        (first['ts'] == null && first['time'] == null)) {
+      return null;
+    }
 
-            final List<LyricWord> words = [];
-            if (item['l'] is List) {
-              final wordsArray = item['l'] as List<dynamic>;
-              for (int wIdx = 0; wIdx < wordsArray.length; wIdx++) {
-                final w = wordsArray[wIdx];
-                if (w is Map<String, dynamic>) {
-                  final String wordText = w['c']?.toString() ?? '';
-                  final double rawOffset = (w['o'] as num?)?.toDouble() ?? ts;
-                  final int wordStartMs = rawOffset >= ts ? (rawOffset * 1000).round() : startMs + (rawOffset * 1000).round();
-
-                  int wordEndMs = endMs;
-                  if (wIdx + 1 < wordsArray.length && wordsArray[wIdx + 1] is Map) {
-                    final nextOffset = (wordsArray[wIdx + 1]['o'] as num?)?.toDouble();
-                    if (nextOffset != null) {
-                      wordEndMs = nextOffset >= ts ? (nextOffset * 1000).round() : startMs + (nextOffset * 1000).round();
-                    }
-                  }
-
-                  words.add(LyricWord(
-                    startMs: wordStartMs,
-                    endMs: wordEndMs,
-                    text: wordText,
-                  ));
-                }
-              }
-            }
-
-            final String lineText = item['text']?.toString() ??
-                (words.isNotEmpty ? words.map((w) => w.text).join('') : '');
-
-            result.add(LyricLine(
-              startMs: startMs,
-              endMs: endMs,
-              text: lineText.trim(),
-              words: words,
-            ));
-          }
-          return result;
-        }
-      }
-    } catch (_) {}
-    return null;
+    return [
+      for (final entry in entries)
+        if (asMap(entry) case final item?) _parseTimedLine(item),
+    ];
   }
+
+  static LyricLine _parseTimedLine(JsonMap item) {
+    final time = item['time'];
+    final ts =
+        _seconds(item['ts']) ?? _seconds(asMap(time)?['total'] ?? time) ?? 0.0;
+    final te = _seconds(item['te']) ?? ts + 3.0;
+    final startMs = (ts * 1000).round();
+    final endMs = (te * 1000).round();
+
+    int toMs(double offset) => offset >= ts
+        ? (offset * 1000).round()
+        : startMs + (offset * 1000).round();
+
+    final rawWords = asList(item['l']) ?? const <Object?>[];
+    final words = <LyricWord>[];
+    for (var i = 0; i < rawWords.length; i++) {
+      final word = asMap(rawWords[i]);
+      if (word == null) continue;
+
+      final nextOffset = i + 1 < rawWords.length
+          ? _seconds(asMap(rawWords[i + 1])?['o'])
+          : null;
+      words.add(
+        LyricWord(
+          startMs: toMs(_seconds(word['o']) ?? ts),
+          endMs: nextOffset == null ? endMs : toMs(nextOffset),
+          text: word['c']?.toString() ?? '',
+        ),
+      );
+    }
+
+    final text =
+        item['text']?.toString() ?? words.map((word) => word.text).join();
+    return LyricLine(
+      startMs: startMs,
+      endMs: endMs,
+      text: text.trim(),
+      words: words,
+    );
+  }
+
+  static double? _seconds(Object? value) =>
+      value is num ? value.toDouble() : null;
 
   static List<LyricLine> _tryParseLrc(String raw, int songDurationMs) {
     final List<LyricLine> result = [];
@@ -93,7 +96,9 @@ class LyricParser {
       if (match != null) {
         final min = int.parse(match.group(1)!);
         final sec = int.parse(match.group(2)!);
-        final frac = match.group(3) != null ? int.parse(match.group(3)!.padRight(3, '0')) : 0;
+        final frac = match.group(3) != null
+            ? int.parse(match.group(3)!.padRight(3, '0'))
+            : 0;
         final startMs = (min * 60 + sec) * 1000 + frac;
 
         final rawText = line.substring(match.end).trim();
@@ -104,14 +109,14 @@ class LyricParser {
           for (final wm in wordMatches) {
             final wMin = int.parse(wm.group(1)!);
             final wSec = int.parse(wm.group(2)!);
-            final wFrac = wm.group(3) != null ? int.parse(wm.group(3)!.padRight(3, '0')) : 0;
+            final wFrac = wm.group(3) != null
+                ? int.parse(wm.group(3)!.padRight(3, '0'))
+                : 0;
             final wStart = (wMin * 60 + wSec) * 1000 + wFrac;
             final wText = wm.group(4) ?? '';
-            words.add(LyricWord(
-              startMs: wStart,
-              endMs: wStart + 500,
-              text: wText,
-            ));
+            words.add(
+              LyricWord(startMs: wStart, endMs: wStart + 500, text: wText),
+            );
           }
           for (int i = 0; i < words.length - 1; i++) {
             words[i] = LyricWord(
@@ -124,19 +129,23 @@ class LyricParser {
 
         final cleanText = rawText.replaceAll(RegExp(r'<[^>]+>'), '').trim();
 
-        result.add(LyricLine(
-          startMs: startMs,
-          endMs: startMs + 4000,
-          text: cleanText,
-          words: words,
-        ));
+        result.add(
+          LyricLine(
+            startMs: startMs,
+            endMs: startMs + 4000,
+            text: cleanText,
+            words: words,
+          ),
+        );
       }
     }
 
     for (int i = 0; i < result.length; i++) {
       final nextStart = (i + 1 < result.length)
           ? result[i + 1].startMs
-          : (songDurationMs > result[i].startMs ? songDurationMs : result[i].startMs + 4000);
+          : (songDurationMs > result[i].startMs
+                ? songDurationMs
+                : result[i].startMs + 4000);
       result[i] = LyricLine(
         startMs: result[i].startMs,
         endMs: nextStart,
@@ -146,21 +155,6 @@ class LyricParser {
     }
 
     return result;
-  }
-
-  static List<LyricLine> _parsePlainText(String raw, int songDurationMs) {
-    final lines = raw.split('\n').where((l) => l.trim().isNotEmpty).toList();
-    if (lines.isEmpty) return [];
-
-    final stepMs = songDurationMs > 0 ? (songDurationMs / lines.length).round() : 3500;
-    return List.generate(lines.length, (index) {
-      final start = index * stepMs;
-      return LyricLine(
-        startMs: start,
-        endMs: start + stepMs,
-        text: lines[index].trim(),
-      );
-    });
   }
 
   static int findActiveLineIndex(List<LyricLine> lines, int currentMs) {
@@ -189,7 +183,10 @@ class LyricParser {
     return ((currentMs - word.startMs) / total).clamp(0.0, 1.0);
   }
 
-  static List<GroupedWord> groupSyllablesIntoWords(List<LyricWord> rawWords, String lineText) {
+  static List<GroupedWord> groupSyllablesIntoWords(
+    List<LyricWord> rawWords,
+    String lineText,
+  ) {
     if (rawWords.isEmpty) return const [];
     final List<GroupedWord> words = [];
     List<LyricWord> currentGroup = [];
@@ -206,7 +203,9 @@ class LyricParser {
         continue;
       }
 
-      final foundIdx = lineText.isNotEmpty ? lineText.indexOf(trimmed, charCursor) : -1;
+      final foundIdx = lineText.isNotEmpty
+          ? lineText.indexOf(trimmed, charCursor)
+          : -1;
       bool isContinuation = false;
 
       if (currentGroup.isNotEmpty) {

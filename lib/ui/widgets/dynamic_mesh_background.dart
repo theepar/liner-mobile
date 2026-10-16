@@ -110,9 +110,7 @@ class _DynamicMeshBackgroundState extends State<DynamicMeshBackground>
               ),
             ),
             Positioned.fill(
-              child: Container(
-                color: Colors.black.withValues(alpha: 0.55),
-              ),
+              child: Container(color: Colors.black.withValues(alpha: 0.55)),
             ),
             Positioned.fill(child: widget.child),
           ],

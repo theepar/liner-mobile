@@ -1,48 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../core/theme/app_theme.dart';
 import '../../providers/player_provider.dart';
 import '../screens/player/fullscreen_player.dart';
+import 'cover_image.dart';
+import 'like_button.dart';
 
 class MiniPlayer extends ConsumerWidget {
   const MiniPlayer({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final playerState = ref.watch(playerStateProvider);
-    final track = playerState.currentTrack;
+    final view = ref.watch(
+      playerStateProvider.select(
+        (s) => (
+          track: s.currentTrack,
+          isPlaying: s.isPlaying,
+          isBuffering: s.isBuffering,
+          hasError: s.hasError,
+        ),
+      ),
+    );
+    final track = view.track;
+    if (track == null) return const SizedBox.shrink();
 
-    if (track == null) {
-      return const SizedBox.shrink();
-    }
-
-    final isPlaying = playerState.isPlaying;
-    final progress = playerState.progress;
+    final notifier = ref.read(playerStateProvider.notifier);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: GestureDetector(
-        onTap: () {
-          Navigator.of(context).push(
-            PageRouteBuilder(
-              pageBuilder: (context, anim, secondaryAnim) => const FullscreenPlayer(),
-              transitionsBuilder: (context, anim, secondaryAnim, child) {
-                const begin = Offset(0.0, 1.0);
-                const end = Offset.zero;
-                const curve = Curves.easeOutCubic;
-                final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-                return SlideTransition(position: anim.drive(tween), child: child);
-              },
-            ),
-          );
-        },
+        onTap: () => Navigator.of(context).push(_fullscreenRoute()),
         child: Container(
           height: 60,
           decoration: BoxDecoration(
             color: LinerColors.darkElevated.withValues(alpha: 0.95),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: LinerColors.darkBorderSecondary.withValues(alpha: 0.8), width: 1),
+            border: Border.all(
+              color: LinerColors.darkBorderSecondary.withValues(alpha: 0.8),
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.5),
@@ -61,22 +57,13 @@ class MiniPlayer extends ConsumerWidget {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImage(
-                          imageUrl: track.coverUrl,
+                        child: CoverImage(
+                          url: track.coverUrl,
+                          fallbackUrl: track.coverFallbackUrl,
                           width: 44,
                           height: 44,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            width: 44,
-                            height: 44,
-                            color: LinerColors.darkPanel,
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            width: 44,
-                            height: 44,
-                            color: LinerColors.darkPanel,
-                            child: const Icon(Icons.music_note, color: Colors.white54, size: 20),
-                          ),
+                          backgroundColor: LinerColors.darkPanel,
+                          iconColor: Colors.white54,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -90,7 +77,6 @@ class MiniPlayer extends ConsumerWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontFamily: 'Inter',
                                 fontWeight: FontWeight.w600,
                                 fontSize: 13.5,
                                 color: LinerColors.darkTextPrimary,
@@ -98,78 +84,62 @@ class MiniPlayer extends ConsumerWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              track.artistName,
+                              view.hasError
+                                  ? 'Playback unavailable'
+                                  : track.artistName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontFamily: 'Inter',
-                                fontWeight: FontWeight.w400,
+                              style: TextStyle(
                                 fontSize: 11.5,
-                                color: LinerColors.darkTextSecondary,
+                                color: view.hasError
+                                    ? Colors.redAccent
+                                    : LinerColors.darkTextSecondary,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      IconButton(
-                        icon: Icon(
-                          playerState.isCurrentLiked
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                          color: playerState.isCurrentLiked
-                              ? LinerColors.accentPrimary
-                              : LinerColors.darkTextSecondary,
-                          size: 20,
-                        ),
-                        splashRadius: 20,
-                        onPressed: () {
-                          ref.read(playerStateProvider.notifier).toggleLike(track.id);
-                        },
+                      LikeButton(
+                        track: track,
+                        inactiveColor: LinerColors.darkTextSecondary,
                       ),
                       IconButton(
-                        icon: playerState.isBuffering
+                        splashRadius: 22,
+                        icon: view.isBuffering
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  color: Colors.white,
                                 ),
                               )
                             : Icon(
-                                isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                view.isPlaying
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
                                 color: Colors.white,
                                 size: 28,
                               ),
-                        splashRadius: 22,
-                        onPressed: () {
-                          ref.read(playerStateProvider.notifier).togglePlayPause();
-                        },
+                        onPressed: notifier.togglePlayPause,
                       ),
                       IconButton(
+                        splashRadius: 20,
                         icon: const Icon(
                           Icons.skip_next_rounded,
                           color: Colors.white,
                           size: 24,
                         ),
-                        splashRadius: 20,
-                        onPressed: () {
-                          ref.read(playerStateProvider.notifier).next();
-                        },
+                        onPressed: notifier.next,
                       ),
                     ],
                   ),
                 ),
-                Positioned(
+                const Positioned(
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: Colors.white.withValues(alpha: 0.08),
-                    valueColor: const AlwaysStoppedAnimation<Color>(LinerColors.accentPrimary),
-                    minHeight: 2.2,
-                  ),
+                  child: _Progress(),
                 ),
               ],
             ),
@@ -178,4 +148,29 @@ class MiniPlayer extends ConsumerWidget {
       ),
     );
   }
+
+  static PageRouteBuilder<void> _fullscreenRoute() => PageRouteBuilder<void>(
+    pageBuilder: (_, _, _) => const FullscreenPlayer(),
+    transitionsBuilder: (_, animation, _, child) => SlideTransition(
+      position: animation.drive(
+        Tween(
+          begin: const Offset(0, 1),
+          end: Offset.zero,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
+      ),
+      child: child,
+    ),
+  );
+}
+
+class _Progress extends ConsumerWidget {
+  const _Progress();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => LinearProgressIndicator(
+    value: ref.watch(playerStateProvider.select((s) => s.progress)),
+    backgroundColor: Colors.white.withValues(alpha: 0.08),
+    color: LinerColors.accentPrimary,
+    minHeight: 2.2,
+  );
 }

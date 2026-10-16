@@ -1,549 +1,486 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/track.dart';
-import '../utils/lyric_parser.dart';
 
-const String primaryApiUrl = 'https://api.tryliner.fun';
-const String fallbackApiUrl = 'http://edge.tryliner.fun:10518';
-const String kPrimaryApiUrl = primaryApiUrl;
-const String kFallbackEdgeUrl = fallbackApiUrl;
+import '../config/app_config.dart';
+import '../models/json_helpers.dart';
+import '../models/liner_user.dart';
 
-const String _apiUrlKey = 'liner_api_url';
-const String _tokenKey = 'liner_token';
+const _apiUrlPrefKey = 'liner_api_url';
+const _sessionStorageKey = 'liner_session';
+const _authPathPrefix = '/v1/auth/';
+const _refreshLeeway = Duration(minutes: 2);
+const _failedOverKey = 'failedOver';
+const _retriedAuthKey = 'retriedAuth';
 
-class ApiClient {
-  static ApiClient? _instance;
-  late final Dio _dio;
-  String _baseUrl = primaryApiUrl;
-  bool _isUsingFallback = false;
-  String? _visitorData;
-  LinerUser? _currentUser;
+class AuthException implements Exception {
+  const AuthException(this.message);
 
-  ApiClient._() {
-    _dio = Dio(BaseOptions(
-      baseUrl: _baseUrl,
-      connectTimeout: const Duration(seconds: 8),
-      receiveTimeout: const Duration(seconds: 12),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'x-client-version': '1.0.4-mobile',
-        'x-platform': 'flutter-mobile',
-      },
-    ));
-    _dio.interceptors.add(_AuthInterceptor());
+  final String message;
+
+  @override
+  String toString() => 'AuthException: $message';
+}
+
+class ApiException implements Exception {
+  const ApiException(this.message, {this.statusCode});
+
+  factory ApiException.fromDio(DioException error) {
+    final body = asMap(error.response?.data);
+    return ApiException(
+      asString(body?['message']) ?? error.message ?? 'Request failed',
+      statusCode: error.response?.statusCode,
+    );
   }
 
-  static ApiClient get instance => _instance ??= ApiClient._();
+  final String message;
+
+  /// Null when the server could not be reached at all.
+  final int? statusCode;
+
+  bool get isNetworkFailure => statusCode == null;
+
+  @override
+  String toString() => 'ApiException($statusCode): $message';
+}
+
+class _Session {
+  const _Session({
+    required this.accessToken,
+    required this.refreshToken,
+    this.expiresAt,
+  });
+
+  static _Session? tryParse(JsonMap json) {
+    final access = asString(json['accessToken']);
+    final refresh = asString(json['refreshToken']);
+    if (access == null || refresh == null) return null;
+    return _Session(
+      accessToken: access,
+      refreshToken: refresh,
+      expiresAt: DateTime.tryParse(
+        asString(json['accessTokenExpiresAt']) ?? '',
+      ),
+    );
+  }
+
+  final String accessToken;
+  final String refreshToken;
+  final DateTime? expiresAt;
+
+  bool get expiresSoon {
+    final expiry = expiresAt;
+    return expiry != null && expiry.difference(DateTime.now()) < _refreshLeeway;
+  }
+
+  JsonMap toJson() => {
+    'accessToken': accessToken,
+    'refreshToken': refreshToken,
+    'accessTokenExpiresAt': expiresAt?.toIso8601String(),
+  };
+}
+
+/// HTTP transport for the Liner API: base-URL failover, bearer sessions with
+/// transparent refresh, and the signed-in user.
+class ApiClient {
+  ApiClient._(this._dio, this._storage) {
+    _dio.interceptors.add(
+      InterceptorsWrapper(onRequest: _onRequest, onError: _onError),
+    );
+  }
+
+  @visibleForTesting
+  factory ApiClient.withDio(
+    Dio dio, {
+    FlutterSecureStorage storage = const FlutterSecureStorage(),
+  }) => ApiClient._(dio, storage);
+
+  static final ApiClient instance = ApiClient._(
+    _createDio(),
+    const FlutterSecureStorage(),
+  );
+
+  final Dio _dio;
+  final FlutterSecureStorage _storage;
+  final _userChanges = StreamController<LinerUser?>.broadcast();
+
+  String _baseUrl = AppConfig.initialApiUrl;
+  _Session? _session;
+  LinerUser? _currentUser;
+  Future<bool>? _refreshing;
 
   String get baseUrl => _baseUrl;
-  bool get isUsingFallback => _isUsingFallback;
+  bool get isUsingFallback => _baseUrl == AppConfig.fallbackApiUrl;
   LinerUser? get currentUser => _currentUser;
-  bool get isAuthenticated => _currentUser != null;
+
+  /// Emits whenever the signed-in user changes, including when the server
+  /// revokes the session.
+  Stream<LinerUser?> get userChanges => _userChanges.stream;
+
+  static Dio _createDio() => Dio(
+    BaseOptions(
+      baseUrl: AppConfig.initialApiUrl,
+      connectTimeout: AppConfig.connectTimeout,
+      receiveTimeout: AppConfig.receiveTimeout,
+      headers: {
+        'Accept': 'application/json',
+        'x-client-version': '${AppConfig.clientVersion}-mobile',
+        'x-platform': AppConfig.clientPlatform,
+      },
+    ),
+  );
 
   Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedUrl = prefs.getString(_apiUrlKey);
-    if (savedUrl != null && savedUrl.isNotEmpty) {
-      _baseUrl = savedUrl;
-      _dio.options.baseUrl = _baseUrl;
-    } else {
-      await probeEndpoint();
-    }
-    unawaited(initVisitorSession());
-    await loadStoredUser();
-  }
-
-  Future<void> initVisitorSession() async {
-    try {
-      final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 5)));
-      final res = await dio.get<String>(
-        'https://www.youtube.com/sw.js_data',
-        options: Options(headers: {
-          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        }),
-      );
-      if (res.data != null) {
-        final match = RegExp(r'Cgt[a-zA-Z0-9_-]{20,}={0,2}').firstMatch(res.data!);
-        if (match != null) {
-          _visitorData = match.group(0);
-          if (_visitorData != null) {
-            _dio.options.headers['x-visitor-data'] = _visitorData;
-          }
-        }
-      }
-    } catch (_) {}
-  }
-
-  Future<void> loadStoredUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(_tokenKey);
-    if (token != null && token.isNotEmpty) {
-      try {
-        final user = await getCurrentUser();
-        _currentUser = user;
-      } catch (_) {}
-    }
-  }
-
-  Future<LinerUser?> login(String email, String password) async {
-    final res = await _dio.post('/v1/auth/login', data: {
-      'email': email,
-      'password': password,
-    });
-    final data = res.data as Map<String, dynamic>;
-    final token = data['accessToken']?.toString() ?? data['token']?.toString();
-    if (token != null) {
+    if (!AppConfig.hasCustomApiUrl) {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_tokenKey, token);
-      if (data['user'] is Map<String, dynamic>) {
-        _currentUser = LinerUser.fromJson(data['user'] as Map<String, dynamic>);
+      final savedUrl = prefs.getString(_apiUrlPrefKey);
+      if (savedUrl != null && savedUrl.isNotEmpty) {
+        _applyBaseUrl(savedUrl);
       } else {
-        _currentUser = await getCurrentUser();
+        await probeEndpoint();
       }
-      return _currentUser;
     }
-    return null;
+
+    await _restoreSession();
+    if (_session != null) unawaited(_refreshUser());
   }
 
-  Future<LinerUser?> register({
+  Future<void> setBaseUrl(String url) async {
+    _applyBaseUrl(url.replaceAll(RegExp(r'/+$'), ''));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_apiUrlPrefKey, _baseUrl);
+  }
+
+  /// Selects the primary API when its health check passes, otherwise the edge
+  /// relay. A custom `LINER_API_URL` instance is never probed away from.
+  Future<String> probeEndpoint() async {
+    if (AppConfig.hasCustomApiUrl) return _baseUrl;
+    try {
+      final probe = Dio(
+        BaseOptions(
+          connectTimeout: AppConfig.probeTimeout,
+          receiveTimeout: AppConfig.probeTimeout,
+        ),
+      );
+      final res = await probe.get<Object?>('${AppConfig.primaryApiUrl}/health');
+      if (res.statusCode == 200) {
+        _applyBaseUrl(AppConfig.primaryApiUrl);
+        return _baseUrl;
+      }
+    } on DioException catch (error) {
+      _log('probeEndpoint', error);
+    }
+    _applyBaseUrl(AppConfig.fallbackApiUrl);
+    return _baseUrl;
+  }
+
+  void _applyBaseUrl(String url) {
+    _baseUrl = url;
+    _dio.options.baseUrl = url;
+  }
+
+  /// Resolves a server-relative path (such as a playback `streamUrl`) against
+  /// the active base URL.
+  String resolveUrl(String pathOrUrl) {
+    if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+      return pathOrUrl;
+    }
+    return '$_baseUrl${pathOrUrl.startsWith('/') ? '' : '/'}$pathOrUrl';
+  }
+
+  Future<LinerUser> login(String email, String password) => _authenticate(
+    '${_authPathPrefix}login',
+    {'email': email, 'password': password},
+  );
+
+  Future<LinerUser> register({
     required String email,
     required String password,
     required String username,
     required String displayName,
-  }) async {
-    final res = await _dio.post('/v1/auth/register', data: {
-      'email': email,
-      'password': password,
-      'username': username.trim().toLowerCase(),
-      'displayName': displayName.trim(),
-    });
-    final data = res.data as Map<String, dynamic>;
-    final token = data['accessToken']?.toString() ?? data['token']?.toString();
-    if (token != null) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_tokenKey, token);
-      if (data['user'] is Map<String, dynamic>) {
-        _currentUser = LinerUser.fromJson(data['user'] as Map<String, dynamic>);
-      } else {
-        _currentUser = await getCurrentUser();
-      }
-      return _currentUser;
-    }
-    return null;
-  }
-
-  Future<LinerUser?> getCurrentUser() async {
-    try {
-      final res = await _dio.get('/v1/me');
-      if (res.data is Map<String, dynamic>) {
-        _currentUser = LinerUser.fromJson(res.data as Map<String, dynamic>);
-        return _currentUser;
-      }
-    } catch (_) {}
-    return null;
-  }
+  }) => _authenticate('${_authPathPrefix}register', {
+    'email': email,
+    'password': password,
+    'username': username.trim().toLowerCase(),
+    'displayName': displayName.trim(),
+  });
 
   Future<void> logout() async {
-    _currentUser = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tokenKey);
-  }
-
-  static String getShareUrl({required String type, required String id}) {
-    return 'https://link.tryliner.fun/$type?id=$id';
-  }
-
-  static String getDeepLink({required String type, required String id}) {
-    return 'liner://$type?id=$id';
-  }
-
-  Future<void> setBaseUrl(String url) async {
-    _baseUrl = url.replaceAll(RegExp(r'/+$'), '');
-    _dio.options.baseUrl = _baseUrl;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_apiUrlKey, _baseUrl);
-  }
-
-  Future<String> probeEndpoint() async {
+    final session = _session;
+    await _clearSession();
+    if (session == null) return;
     try {
-      final probe = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 4),
-        receiveTimeout: const Duration(seconds: 4),
-      ));
-      final res = await probe.get('$primaryApiUrl/health');
-      if (res.statusCode == 200) {
-        _baseUrl = primaryApiUrl;
-        _isUsingFallback = false;
-        _dio.options.baseUrl = _baseUrl;
-        return _baseUrl;
-      }
-    } catch (_) {}
-
-    _baseUrl = fallbackApiUrl;
-    _isUsingFallback = true;
-    _dio.options.baseUrl = _baseUrl;
-    return _baseUrl;
-  }
-
-  Future<List<Track>> getPopularTracks({String period = '7d', int limit = 20}) async {
-    try {
-      final res = await _dio.get(
-        '/v1/tracks/popular',
-        queryParameters: {'period': period, 'limit': limit},
+      await _dio.post<Object?>(
+        '${_authPathPrefix}logout',
+        data: {'refreshToken': session.refreshToken},
+        options: Options(
+          headers: {'Authorization': 'Bearer ${session.accessToken}'},
+        ),
       );
-      if (res.data is Map && res.data['items'] is List) {
-        final items = res.data['items'] as List<dynamic>;
-        return items.map((e) {
-          final tData = e['track'] ?? e;
-          final t = Track.fromJson(tData as Map<String, dynamic>);
-          return t.copyWith(
-            playCount: (e['playCount'] as num?)?.toInt() ?? t.playCount,
-          );
-        }).toList();
-      } else if (res.data is List) {
-        return (res.data as List).map((e) => Track.fromJson(e as Map<String, dynamic>)).toList();
-      }
-    } catch (_) {}
-    return defaultTracks();
-  }
-
-  Future<List<Playlist>> getDailyMixes() async {
-    try {
-      Response res;
-      try {
-        res = await _dio.get('/v1/me/recommendations/daily-mixes');
-      } catch (_) {
-        res = await _dio.get('/v1/me/daily-mixes');
-      }
-      if (res.data is Map && res.data['items'] is List) {
-        return (res.data['items'] as List)
-            .map((e) => Playlist.fromJson(e as Map<String, dynamic>))
-            .toList();
-      } else if (res.data is List) {
-        return (res.data as List).map((e) => Playlist.fromJson(e as Map<String, dynamic>)).toList();
-      }
-    } catch (_) {}
-    return defaultMixes();
-  }
-
-  Future<Map<String, dynamic>> search(String query, {String type = 'all'}) async {
-    if (query.trim().isEmpty) {
-      return {'tracks': <Track>[], 'artists': <Artist>[], 'playlists': <Playlist>[]};
-    }
-    try {
-      final res = await _dio.get('/v1/search', queryParameters: {'q': query, 'type': type});
-      final data = res.data as Map<String, dynamic>;
-
-      final tracks = (data['tracks']?['items'] as List<dynamic>?)
-              ?.map((e) => Track.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [];
-      final artists = (data['artists']?['items'] as List<dynamic>?)
-              ?.map((e) => Artist.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [];
-      final playlists = (data['playlists']?['items'] as List<dynamic>?)
-              ?.map((e) => Playlist.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [];
-
-      return {'tracks': tracks, 'artists': artists, 'playlists': playlists};
-    } catch (_) {
-      final all = defaultTracks();
-      final filtered = all
-          .where((t) =>
-              t.title.toLowerCase().contains(query.toLowerCase()) ||
-              t.artistName.toLowerCase().contains(query.toLowerCase()))
-          .toList();
-      return {'tracks': filtered, 'artists': <Artist>[], 'playlists': <Playlist>[]};
+    } on DioException catch (error) {
+      _log('logout', error);
     }
   }
 
-  Future<String> getPlaybackStreamUrl(String trackId, {String preferredCodec = 'opus'}) =>
-      getStreamUrl(trackId, preferredCodec: preferredCodec);
+  Future<Object?> get(String path, {JsonMap? query}) =>
+      _send('GET', path, query: query);
 
-  Future<String> getStreamUrl(String trackId, {String preferredCodec = 'opus'}) async {
+  Future<Object?> post(String path, {Object? body}) =>
+      _send('POST', path, body: body);
+
+  Future<Object?> put(String path) => _send('PUT', path);
+
+  Future<Object?> delete(String path) => _send('DELETE', path);
+
+  /// Server-sent events: yields the joined `data:` payload of each event.
+  Stream<String> getEventStream(
+    String path, {
+    Duration receiveTimeout = const Duration(seconds: 30),
+  }) async* {
+    final ResponseBody body;
     try {
-      final res = await _dio.post(
-        '/v1/tracks/$trackId/playback',
-        data: {'preferredCodec': preferredCodec, 'transport': 'direct_innertube'},
+      final res = await _dio.get<ResponseBody>(
+        path,
+        options: Options(
+          responseType: ResponseType.stream,
+          receiveTimeout: receiveTimeout,
+          headers: {'Accept': 'text/event-stream'},
+        ),
       );
-      if (res.data is Map) {
-        final stream = res.data['streamUrl']?.toString() ?? res.data['url']?.toString();
-        if (stream != null && stream.isNotEmpty) {
-          return stream;
-        }
+      body = res.data!;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+
+    var buffer = '';
+    await for (final chunk in body.stream.cast<List<int>>().transform(
+      utf8.decoder,
+    )) {
+      buffer = (buffer + chunk).replaceAll('\r\n', '\n');
+      int boundary;
+      while ((boundary = buffer.indexOf('\n\n')) != -1) {
+        final event = buffer.substring(0, boundary);
+        buffer = buffer.substring(boundary + 2);
+        final data = _eventData(event);
+        if (data.isNotEmpty) yield data;
       }
-    } catch (_) {}
-    return 'https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3';
+    }
+    final trailing = _eventData(buffer);
+    if (trailing.isNotEmpty) yield trailing;
   }
 
-  Future<List<LyricLine>> getLyrics(String trackId, {int durationMs = 0}) async {
+  static String _eventData(String event) => event
+      .split('\n')
+      .where((line) => line.startsWith('data:'))
+      .map((line) => line.substring(5).trim())
+      .join('\n');
+
+  Future<Object?> _send(
+    String method,
+    String path, {
+    JsonMap? query,
+    Object? body,
+  }) async {
     try {
-      final res = await _dio.get('/v1/tracks/$trackId/lyrics');
-      String raw = '';
-      if (res.data is String) {
-        raw = res.data as String;
-      } else if (res.data is Map) {
-        raw = res.data['lyrics']?.toString() ?? res.data['raw']?.toString() ?? '';
-      }
-      if (raw.isNotEmpty) {
-        return LyricParser.parse(raw, songDurationMs: durationMs);
-      }
-    } catch (_) {}
-    return defaultLyrics(trackId);
+      final res = await _dio.request<Object?>(
+        path,
+        data: body,
+        queryParameters: query,
+        options: Options(method: method),
+      );
+      return res.data;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
   }
 
-  Future<List<Track>> getLikedTracks() async {
+  Future<LinerUser> _authenticate(String path, JsonMap body) async {
     try {
-      final res = await _dio.get('/v1/me/library/tracks');
-      if (res.data is Map && res.data['items'] is List) {
-        return (res.data['items'] as List)
-            .map((e) => Track.fromJson(e['track'] ?? e as Map<String, dynamic>))
-            .toList();
+      final res = await _dio.post<Object?>(path, data: body);
+      final data = asMap(res.data);
+      final session = data == null ? null : _Session.tryParse(data);
+      final userJson = asMap(data?['user']);
+      if (session == null || userJson == null) {
+        throw const AuthException('The server returned an invalid session.');
       }
-    } catch (_) {}
-    return defaultTracks().take(3).toList();
+      final user = LinerUser.fromJson(userJson);
+      await _storeSession(session, user);
+      return user;
+    } on DioException catch (error) {
+      _log('authenticate', error);
+      throw AuthException(_authMessage(error));
+    }
   }
 
-  static List<Track> defaultTracks() => [
-        const Track(
-          id: 'liner_1',
-          title: 'Blinding Lights',
-          artistName: 'The Weeknd',
-          albumName: 'After Hours',
-          coverUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80',
-          durationMs: 200000,
-          playCount: 4210000,
-          hasLyrics: true,
-          streamUrl: 'https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3',
-        ),
-        const Track(
-          id: 'liner_2',
-          title: 'Starboy',
-          artistName: 'The Weeknd ft. Daft Punk',
-          albumName: 'Starboy',
-          coverUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80',
-          durationMs: 230000,
-          playCount: 3890000,
-          hasLyrics: true,
-          streamUrl: 'https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Sevish_-__nbsp_.mp3',
-        ),
-        const Track(
-          id: 'liner_3',
-          title: 'Midnight City',
-          artistName: 'M83',
-          albumName: 'Hurry Up, We\'re Dreaming',
-          coverUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80',
-          durationMs: 243000,
-          playCount: 2950000,
-          hasLyrics: true,
-          streamUrl: 'https://commondatastorage.googleapis.com/codeskulptor-demos/riceracer_assets/music/menu.ogg',
-        ),
-        const Track(
-          id: 'liner_4',
-          title: 'As It Was',
-          artistName: 'Harry Styles',
-          albumName: 'Harry\'s House',
-          coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&auto=format&fit=crop&q=80',
-          durationMs: 167000,
-          playCount: 3120000,
-          hasLyrics: true,
-          streamUrl: 'https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3',
-        ),
-        const Track(
-          id: 'liner_5',
-          title: 'Levitating',
-          artistName: 'Dua Lipa',
-          albumName: 'Future Nostalgia',
-          coverUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop&q=80',
-          durationMs: 203000,
-          playCount: 2780000,
-          hasLyrics: true,
-          streamUrl: 'https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Sevish_-__nbsp_.mp3',
-        ),
-      ];
+  static String _authMessage(DioException error) =>
+      switch (error.response?.statusCode) {
+        null => 'Cannot reach the server. Check your connection.',
+        401 || 403 => 'Incorrect email or password.',
+        409 => 'That email or username is already taken.',
+        400 || 422 => 'Please check the details you entered.',
+        429 => 'Too many attempts. Try again in a moment.',
+        _ => 'Something went wrong. Please try again.',
+      };
 
-  static List<Track> getFallbackPopularTracks() => defaultTracks();
-
-  static List<Playlist> defaultMixes() => [
-        const Playlist(
-          id: 'mix_1',
-          name: 'Daily Mix 1',
-          description: 'The Weeknd, Daft Punk, Post Malone and more',
-          coverUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80',
-          trackCount: 25,
-        ),
-        const Playlist(
-          id: 'mix_2',
-          name: 'Synthwave Night Ride',
-          description: 'Neon retro futuristic beats & melodic synthesizers',
-          coverUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80',
-          trackCount: 30,
-        ),
-        const Playlist(
-          id: 'mix_3',
-          name: 'Chill Beats & Lo-Fi',
-          description: 'Deep focus, calm vibes for late night coding',
-          coverUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80',
-          trackCount: 42,
-        ),
-      ];
-
-  static List<Playlist> getFallbackDailyMixes() => defaultMixes();
-
-  static List<Artist> defaultArtists() => [
-        const Artist(
-          id: 'art_1',
-          name: 'The Weeknd',
-          avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&auto=format&fit=crop&q=80',
-          monthlyListeners: 108500000,
-        ),
-        const Artist(
-          id: 'art_2',
-          name: 'Dua Lipa',
-          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80',
-          monthlyListeners: 74200000,
-        ),
-        const Artist(
-          id: 'art_3',
-          name: 'Harry Styles',
-          avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=600&auto=format&fit=crop&q=80',
-          monthlyListeners: 62400000,
-        ),
-      ];
-
-  static List<Artist> getFallbackPopularArtists() => defaultArtists();
-
-  static List<LyricLine> defaultLyrics(String trackId) => [
-        const LyricLine(
-          startMs: 1000,
-          endMs: 5000,
-          text: "Yeah, I've been tryna call",
-          words: [
-            LyricWord(startMs: 1000, endMs: 1800, text: "Yeah, "),
-            LyricWord(startMs: 1800, endMs: 2400, text: "I've "),
-            LyricWord(startMs: 2400, endMs: 3100, text: "been "),
-            LyricWord(startMs: 3100, endMs: 3900, text: "tryna "),
-            LyricWord(startMs: 3900, endMs: 5000, text: "call"),
-          ],
-        ),
-        const LyricLine(
-          startMs: 5200,
-          endMs: 9500,
-          text: "I've been on my own for long enough",
-          words: [
-            LyricWord(startMs: 5200, endMs: 5800, text: "I've "),
-            LyricWord(startMs: 5800, endMs: 6400, text: "been "),
-            LyricWord(startMs: 6400, endMs: 7000, text: "on "),
-            LyricWord(startMs: 7000, endMs: 7600, text: "my "),
-            LyricWord(startMs: 7600, endMs: 8200, text: "own "),
-            LyricWord(startMs: 8200, endMs: 8800, text: "for "),
-            LyricWord(startMs: 8800, endMs: 9200, text: "long "),
-            LyricWord(startMs: 9200, endMs: 9500, text: "enough"),
-          ],
-        ),
-        const LyricLine(
-          startMs: 9800,
-          endMs: 14200,
-          text: "Maybe you can show me how to love, maybe",
-          words: [
-            LyricWord(startMs: 9800, endMs: 10400, text: "Maybe "),
-            LyricWord(startMs: 10400, endMs: 11000, text: "you "),
-            LyricWord(startMs: 11000, endMs: 11600, text: "can "),
-            LyricWord(startMs: 11600, endMs: 12200, text: "show "),
-            LyricWord(startMs: 12200, endMs: 12800, text: "me "),
-            LyricWord(startMs: 12800, endMs: 13400, text: "how "),
-            LyricWord(startMs: 13400, endMs: 13800, text: "to "),
-            LyricWord(startMs: 13800, endMs: 14200, text: "love, maybe"),
-          ],
-        ),
-        const LyricLine(
-          startMs: 14500,
-          endMs: 19500,
-          text: "I'm going through withdrawals",
-          words: [
-            LyricWord(startMs: 14500, endMs: 15500, text: "I'm "),
-            LyricWord(startMs: 15500, endMs: 16800, text: "going "),
-            LyricWord(startMs: 16800, endMs: 17800, text: "through "),
-            LyricWord(startMs: 17800, endMs: 19500, text: "withdrawals"),
-          ],
-        ),
-        const LyricLine(
-          startMs: 20000,
-          endMs: 25000,
-          text: "You don't even have to do too much",
-          words: [
-            LyricWord(startMs: 20000, endMs: 20800, text: "You "),
-            LyricWord(startMs: 20800, endMs: 21600, text: "don't "),
-            LyricWord(startMs: 21600, endMs: 22400, text: "even "),
-            LyricWord(startMs: 22400, endMs: 23200, text: "have "),
-            LyricWord(startMs: 23200, endMs: 23800, text: "to "),
-            LyricWord(startMs: 23800, endMs: 24400, text: "do "),
-            LyricWord(startMs: 24400, endMs: 25000, text: "too much"),
-          ],
-        ),
-        const LyricLine(
-          startMs: 25500,
-          endMs: 31000,
-          text: "You can turn me on with just a touch, baby",
-          words: [
-            LyricWord(startMs: 25500, endMs: 26200, text: "You "),
-            LyricWord(startMs: 26200, endMs: 27000, text: "can "),
-            LyricWord(startMs: 27000, endMs: 27800, text: "turn "),
-            LyricWord(startMs: 27800, endMs: 28600, text: "me "),
-            LyricWord(startMs: 28600, endMs: 29400, text: "on "),
-            LyricWord(startMs: 29400, endMs: 30000, text: "with "),
-            LyricWord(startMs: 30000, endMs: 30500, text: "just "),
-            LyricWord(startMs: 30500, endMs: 31000, text: "a touch"),
-          ],
-        ),
-        const LyricLine(
-          startMs: 31500,
-          endMs: 38000,
-          text: "I said, ooh, I'm blinded by the lights",
-          words: [
-            LyricWord(startMs: 31500, endMs: 32300, text: "I "),
-            LyricWord(startMs: 32300, endMs: 33000, text: "said, "),
-            LyricWord(startMs: 33000, endMs: 34200, text: "ooh, "),
-            LyricWord(startMs: 34200, endMs: 35000, text: "I'm "),
-            LyricWord(startMs: 35000, endMs: 35800, text: "blinded "),
-            LyricWord(startMs: 35800, endMs: 36600, text: "by "),
-            LyricWord(startMs: 36600, endMs: 37200, text: "the "),
-            LyricWord(startMs: 37200, endMs: 38000, text: "lights"),
-          ],
-        ),
-        const LyricLine(
-          startMs: 38500,
-          endMs: 45000,
-          text: "No, I can't sleep until I feel your touch",
-          words: [
-            LyricWord(startMs: 38500, endMs: 39200, text: "No, "),
-            LyricWord(startMs: 39200, endMs: 39800, text: "I "),
-            LyricWord(startMs: 39800, endMs: 40500, text: "can't "),
-            LyricWord(startMs: 40500, endMs: 41200, text: "sleep "),
-            LyricWord(startMs: 41200, endMs: 42000, text: "until "),
-            LyricWord(startMs: 42000, endMs: 42800, text: "I "),
-            LyricWord(startMs: 42800, endMs: 43600, text: "feel "),
-            LyricWord(startMs: 43600, endMs: 44200, text: "your "),
-            LyricWord(startMs: 44200, endMs: 45000, text: "touch"),
-          ],
-        ),
-      ];
-
-  static List<LyricLine> getFallbackLyricsForTrack(String trackId) => defaultLyrics(trackId);
-}
-
-class _AuthInterceptor extends Interceptor {
-  @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(_tokenKey);
-    if (token != null && token.isNotEmpty) {
-      options.headers['Authorization'] = 'Bearer $token';
+  Future<void> _onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    if (!options.path.startsWith(_authPathPrefix)) {
+      if (_session?.expiresSoon ?? false) await _refreshSession();
+      final token = _session?.accessToken;
+      if (token != null) options.headers['Authorization'] = 'Bearer $token';
     }
     handler.next(options);
+  }
+
+  Future<void> _onError(
+    DioException error,
+    ErrorInterceptorHandler handler,
+  ) async {
+    final options = error.requestOptions;
+    try {
+      final isAuthPath = options.path.startsWith(_authPathPrefix);
+      if (error.response?.statusCode == 401 &&
+          !isAuthPath &&
+          options.extra[_retriedAuthKey] != true &&
+          _session != null &&
+          await _refreshSession()) {
+        options.extra[_retriedAuthKey] = true;
+        return handler.resolve(await _dio.fetch<Object?>(options));
+      }
+      if (_isConnectionFailure(error) &&
+          options.extra[_failedOverKey] != true) {
+        final failover = _failoverBaseUrl();
+        if (failover != null) {
+          return handler.resolve(await _retryOn(failover, options));
+        }
+      }
+    } on DioException catch (retryError) {
+      return handler.reject(retryError);
+    }
+    handler.next(error);
+  }
+
+  static bool _isConnectionFailure(DioException error) =>
+      error.type == DioExceptionType.connectionError ||
+      error.type == DioExceptionType.connectionTimeout;
+
+  String? _failoverBaseUrl() {
+    if (_baseUrl == AppConfig.primaryApiUrl) return AppConfig.fallbackApiUrl;
+    if (_baseUrl == AppConfig.fallbackApiUrl) return AppConfig.primaryApiUrl;
+    return null;
+  }
+
+  Future<Response<Object?>> _retryOn(
+    String baseUrl,
+    RequestOptions options,
+  ) async {
+    final previous = _baseUrl;
+    _applyBaseUrl(baseUrl);
+    try {
+      return await _dio.fetch<Object?>(
+        options.copyWith(
+          baseUrl: baseUrl,
+          extra: {...options.extra, _failedOverKey: true},
+        ),
+      );
+    } on DioException {
+      _applyBaseUrl(previous);
+      rethrow;
+    }
+  }
+
+  Future<bool> _refreshSession() =>
+      _refreshing ??= _performRefresh().whenComplete(() => _refreshing = null);
+
+  Future<bool> _performRefresh() async {
+    final current = _session;
+    if (current == null) return false;
+    try {
+      final res = await _dio.post<Object?>(
+        '${_authPathPrefix}refresh',
+        data: {'refreshToken': current.refreshToken},
+      );
+      final data = asMap(res.data);
+      final session = data == null ? null : _Session.tryParse(data);
+      if (session == null) return false;
+      final userJson = asMap(data?['user']);
+      await _storeSession(
+        session,
+        userJson == null ? _currentUser : LinerUser.fromJson(userJson),
+      );
+      return true;
+    } on DioException catch (error) {
+      _log('refresh', error);
+      final status = error.response?.statusCode;
+      if (status == 401 || status == 403) await _clearSession();
+      return false;
+    }
+  }
+
+  Future<void> _refreshUser() async {
+    try {
+      final data = asMap(await get('/v1/me'));
+      if (data == null || _session == null) return;
+      await _storeSession(_session!, LinerUser.fromJson(data));
+    } on ApiException catch (error) {
+      _log('refreshUser', error);
+    }
+  }
+
+  Future<void> _restoreSession() async {
+    try {
+      final raw = await _storage.read(key: _sessionStorageKey);
+      final stored = raw == null ? null : asMap(jsonDecode(raw));
+      if (stored == null) return;
+      final session = _Session.tryParse(stored);
+      final userJson = asMap(stored['user']);
+      if (session == null || userJson == null) return;
+      _session = session;
+      _currentUser = LinerUser.fromJson(userJson);
+    } on Exception catch (error) {
+      _log('restoreSession', error);
+      await _clearSession();
+    }
+  }
+
+  void _setUser(LinerUser? user) {
+    if (user == _currentUser) return;
+    _currentUser = user;
+    _userChanges.add(user);
+  }
+
+  Future<void> _storeSession(_Session session, LinerUser? user) async {
+    _session = session;
+    if (user == null) return;
+    _setUser(user);
+    try {
+      await _storage.write(
+        key: _sessionStorageKey,
+        value: jsonEncode({...session.toJson(), 'user': user.toJson()}),
+      );
+    } on Exception catch (error) {
+      _log('storeSession', error);
+    }
+  }
+
+  Future<void> _clearSession() async {
+    _session = null;
+    _setUser(null);
+    try {
+      await _storage.delete(key: _sessionStorageKey);
+    } on Exception catch (error) {
+      _log('clearSession', error);
+    }
+  }
+
+  static void _log(String operation, Object error) {
+    developer.log('$operation failed: $error', name: 'ApiClient');
   }
 }

@@ -1,28 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/theme/app_theme.dart';
-import '../widgets/mini_player.dart';
-import '../screens/home/home_screen.dart';
-import '../screens/search/search_screen.dart';
-import '../screens/library/library_screen.dart';
-import '../screens/settings/settings_screen.dart';
 
-class MainNavigationShell extends ConsumerStatefulWidget {
+import '../../core/theme/app_theme.dart';
+import '../screens/home/home_screen.dart';
+import '../screens/library/library_screen.dart';
+import '../screens/search/search_screen.dart';
+import '../screens/settings/settings_screen.dart';
+import '../widgets/mini_player.dart';
+
+class MainNavigationShell extends StatefulWidget {
   const MainNavigationShell({super.key});
 
   @override
-  ConsumerState<MainNavigationShell> createState() => _MainNavigationShellState();
+  State<MainNavigationShell> createState() => _MainNavigationShellState();
 }
 
-class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
-  int _currentIndex = 0;
-
-  final List<Widget> _screens = const [
+class _MainNavigationShellState extends State<MainNavigationShell> {
+  static const _screens = <Widget>[
     HomeScreen(),
     SearchScreen(),
     LibraryScreen(),
     SettingsScreen(),
   ];
+
+  int _currentIndex = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -30,10 +30,7 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          IndexedStack(
-            index: _currentIndex,
-            children: _screens,
-          ),
+          IndexedStack(index: _currentIndex, children: _screens),
           Positioned(
             left: 0,
             right: 0,
@@ -46,16 +43,17 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
                   decoration: BoxDecoration(
                     color: LinerColors.darkSurface.withValues(alpha: 0.96),
                     border: const Border(
-                      top: BorderSide(color: LinerColors.darkBorderPrimary, width: 0.8),
+                      top: BorderSide(
+                        color: LinerColors.darkBorderPrimary,
+                        width: 0.8,
+                      ),
                     ),
                   ),
                   child: SafeArea(
                     top: false,
                     child: BottomNavigationBar(
                       currentIndex: _currentIndex,
-                      onTap: (index) {
-                        setState(() => _currentIndex = index);
-                      },
+                      onTap: (index) => setState(() => _currentIndex = index),
                       backgroundColor: Colors.transparent,
                       elevation: 0,
                       type: BottomNavigationBarType.fixed,
@@ -63,27 +61,27 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
                       unselectedItemColor: Colors.white.withValues(alpha: 0.4),
                       selectedFontSize: 11,
                       unselectedFontSize: 11,
-                      selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontFamily: 'Inter'),
-                      unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontFamily: 'Inter'),
+                      selectedLabelStyle: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      unselectedLabelStyle: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                      ),
                       items: const [
                         BottomNavigationBarItem(
                           icon: Icon(Icons.home_filled),
-                          activeIcon: Icon(Icons.home_filled, color: LinerColors.accentPrimary),
                           label: 'Home',
                         ),
                         BottomNavigationBarItem(
                           icon: Icon(Icons.search_rounded),
-                          activeIcon: Icon(Icons.search_rounded, color: LinerColors.accentPrimary),
                           label: 'Search',
                         ),
                         BottomNavigationBarItem(
                           icon: Icon(Icons.library_music_rounded),
-                          activeIcon: Icon(Icons.library_music_rounded, color: LinerColors.accentPrimary),
                           label: 'Library',
                         ),
                         BottomNavigationBarItem(
                           icon: Icon(Icons.tune_rounded),
-                          activeIcon: Icon(Icons.tune_rounded, color: LinerColors.accentPrimary),
                           label: 'Settings',
                         ),
                       ],

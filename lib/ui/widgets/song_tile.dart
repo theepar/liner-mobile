@@ -1,30 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/models/track.dart';
 import '../../core/theme/app_theme.dart';
+import '../../providers/player_provider.dart';
+import 'cover_image.dart';
+import 'like_button.dart';
 
-class SongTile extends StatelessWidget {
-  final Track track;
-  final int? rank;
-  final bool isPlaying;
-  final bool isLiked;
-  final VoidCallback onTap;
-  final VoidCallback? onLikeToggle;
-  final VoidCallback? onMoreOptions;
-
+class SongTile extends ConsumerWidget {
   const SongTile({
     super.key,
     required this.track,
-    this.rank,
-    this.isPlaying = false,
-    this.isLiked = false,
     required this.onTap,
-    this.onLikeToggle,
-    this.onMoreOptions,
+    this.rank,
   });
 
+  final Track track;
+  final int? rank;
+  final VoidCallback onTap;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isPlaying = ref.watch(
+      currentTrackIdProvider.select((id) => id == track.id),
+    );
+    final highlight = isPlaying
+        ? LinerColors.accentPrimary
+        : LinerColors.darkTextPrimary;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -32,16 +35,17 @@ class SongTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 8),
         child: Row(
           children: [
-            if (rank != null) ...[
+            if (rank case final rank?) ...[
               SizedBox(
                 width: 26,
                 child: Text(
-                  rank.toString(),
+                  '$rank',
                   style: TextStyle(
-                    fontFamily: 'Inter',
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
-                    color: isPlaying ? LinerColors.accentPrimary : LinerColors.darkTextTertiary,
+                    color: isPlaying
+                        ? LinerColors.accentPrimary
+                        : LinerColors.darkTextTertiary,
                   ),
                 ),
               ),
@@ -49,38 +53,11 @@ class SongTile extends StatelessWidget {
             ],
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: CachedNetworkImage(
-                imageUrl: track.coverUrl,
+              child: CoverImage(
+                url: track.coverUrl,
+                fallbackUrl: track.coverFallbackUrl,
                 width: 46,
                 height: 46,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  width: 46,
-                  height: 46,
-                  color: LinerColors.darkElevated,
-                ),
-                errorWidget: (context, url, error) {
-                  if (track.coverFallbackUrl != null && track.coverFallbackUrl!.isNotEmpty) {
-                    return CachedNetworkImage(
-                      imageUrl: track.coverFallbackUrl!,
-                      width: 46,
-                      height: 46,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(
-                        width: 46,
-                        height: 46,
-                        color: LinerColors.darkElevated,
-                        child: const Icon(Icons.music_note, size: 20, color: LinerColors.darkTextTertiary),
-                      ),
-                    );
-                  }
-                  return Container(
-                    width: 46,
-                    height: 46,
-                    color: LinerColors.darkElevated,
-                    child: const Icon(Icons.music_note, size: 20, color: LinerColors.darkTextTertiary),
-                  );
-                },
               ),
             ),
             const SizedBox(width: 12),
@@ -97,24 +74,32 @@ class SongTile extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontFamily: 'Inter',
                             fontWeight: FontWeight.w600,
                             fontSize: 14,
-                            color: isPlaying ? LinerColors.accentPrimary : LinerColors.darkTextPrimary,
+                            color: highlight,
                           ),
                         ),
                       ),
                       if (track.explicit) ...[
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
-                            color: LinerColors.darkTextTertiary.withValues(alpha: 0.3),
+                            color: LinerColors.darkTextTertiary.withValues(
+                              alpha: 0.3,
+                            ),
                             borderRadius: BorderRadius.circular(3),
                           ),
                           child: const Text(
                             'E',
-                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ],
@@ -126,8 +111,6 @@ class SongTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontFamily: 'Inter',
-                      fontWeight: FontWeight.w400,
                       fontSize: 12,
                       color: LinerColors.darkTextSecondary,
                     ),
@@ -135,26 +118,7 @@ class SongTile extends StatelessWidget {
                 ],
               ),
             ),
-            if (onLikeToggle != null)
-              IconButton(
-                icon: Icon(
-                  isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                  color: isLiked ? LinerColors.accentPrimary : LinerColors.darkTextTertiary,
-                  size: 20,
-                ),
-                splashRadius: 20,
-                onPressed: onLikeToggle,
-              ),
-            if (onMoreOptions != null)
-              IconButton(
-                icon: const Icon(
-                  Icons.more_vert_rounded,
-                  color: LinerColors.darkTextTertiary,
-                  size: 20,
-                ),
-                splashRadius: 20,
-                onPressed: onMoreOptions,
-              ),
+            LikeButton(track: track),
           ],
         ),
       ),

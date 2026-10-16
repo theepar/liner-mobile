@@ -1,8 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../core/theme/app_theme.dart';
+import 'cover_image.dart';
 
 class SongCard extends StatelessWidget {
+  const SongCard({
+    super.key,
+    required this.title,
+    required this.imageUrl,
+    required this.onTap,
+    this.subtitle,
+    this.fallbackImageUrl,
+    this.onPlay,
+    this.width = 140,
+    this.height = 140,
+    this.isCircular = false,
+  });
+
   final String title;
   final String? subtitle;
   final String imageUrl;
@@ -13,69 +27,32 @@ class SongCard extends StatelessWidget {
   final double height;
   final bool isCircular;
 
-  const SongCard({
-    super.key,
-    required this.title,
-    this.subtitle,
-    required this.imageUrl,
-    this.fallbackImageUrl,
-    required this.onTap,
-    this.onPlay,
-    this.width = 140,
-    this.height = 140,
-    this.isCircular = false,
-  });
-
   @override
   Widget build(BuildContext context) {
+    final textAlign = isCircular ? TextAlign.center : TextAlign.start;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: width,
         margin: const EdgeInsets.only(right: 14),
         child: Column(
-          crossAxisAlignment: isCircular ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          crossAxisAlignment: isCircular
+              ? CrossAxisAlignment.center
+              : CrossAxisAlignment.start,
           children: [
             Stack(
               alignment: Alignment.bottomRight,
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(isCircular ? width / 2 : 12),
-                  child: CachedNetworkImage(
-                    imageUrl: imageUrl,
+                  borderRadius: BorderRadius.circular(
+                    isCircular ? width / 2 : 12,
+                  ),
+                  child: CoverImage(
+                    url: imageUrl,
+                    fallbackUrl: fallbackImageUrl,
                     width: width,
                     height: height,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      width: width,
-                      height: height,
-                      color: LinerColors.darkElevated,
-                      child: const Center(
-                        child: Icon(Icons.music_note, color: LinerColors.darkTextTertiary),
-                      ),
-                    ),
-                    errorWidget: (context, url, error) {
-                      if (fallbackImageUrl != null && fallbackImageUrl!.isNotEmpty) {
-                        return CachedNetworkImage(
-                          imageUrl: fallbackImageUrl!,
-                          width: width,
-                          height: height,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => Container(
-                            width: width,
-                            height: height,
-                            color: LinerColors.darkElevated,
-                            child: const Icon(Icons.music_note, color: LinerColors.darkTextTertiary),
-                          ),
-                        );
-                      }
-                      return Container(
-                        width: width,
-                        height: height,
-                        color: LinerColors.darkElevated,
-                        child: const Icon(Icons.music_note, color: LinerColors.darkTextTertiary),
-                      );
-                    },
+                    iconSize: 28,
                   ),
                 ),
                 if (onPlay != null && !isCircular)
@@ -97,7 +74,11 @@ class SongCard extends StatelessWidget {
                             ),
                           ],
                         ),
-                        child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ),
@@ -108,24 +89,21 @@ class SongCard extends StatelessWidget {
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              textAlign: isCircular ? TextAlign.center : TextAlign.start,
+              textAlign: textAlign,
               style: const TextStyle(
-                fontFamily: 'Inter',
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
                 color: LinerColors.darkTextPrimary,
               ),
             ),
-            if (subtitle != null) ...[
+            if (subtitle case final subtitle?) ...[
               const SizedBox(height: 2),
               Text(
-                subtitle!,
+                subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                textAlign: isCircular ? TextAlign.center : TextAlign.start,
+                textAlign: textAlign,
                 style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontWeight: FontWeight.w400,
                   fontSize: 11,
                   color: LinerColors.darkTextSecondary,
                 ),

@@ -1,330 +1,277 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/music_provider.dart';
 import '../../../providers/player_provider.dart';
+import '../../widgets/liner_logo.dart';
 import '../../widgets/song_card.dart';
 import '../../widgets/song_tile.dart';
+import '../../widgets/status_views.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  LinearGradient _getTimeOfDayGlow() {
-    final hour = DateTime.now().hour;
-    if (hour >= 5 && hour < 12) {
-      return const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0x33F59E0B), Color(0x1AF97316), Colors.transparent],
-      );
-    } else if (hour >= 12 && hour < 17) {
-      return const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0x33FBBF24), Color(0x1A0EA5E9), Colors.transparent],
-      );
-    } else if (hour >= 17 && hour < 22) {
-      return const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0x33F43F5E), Color(0x1AA855F7), Colors.transparent],
-      );
-    }
-    return const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [Color(0x3D4F46E5), Color(0x267C3AED), Colors.transparent],
-    );
-  }
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final popularTracksAsync = ref.watch(popularTracksProvider);
-    final dailyMixesAsync = ref.watch(dailyMixesProvider);
-    final popularArtists = ref.watch(popularArtistsProvider);
-    final playerState = ref.watch(playerStateProvider);
-    final playerNotifier = ref.read(playerStateProvider.notifier);
-
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          Positioned(
+          const Positioned(
             top: 0,
             left: 0,
             right: 0,
             height: 240,
-            child: Container(
-              decoration: BoxDecoration(gradient: _getTimeOfDayGlow()),
-            ),
+            child: _TimeOfDayGlow(),
           ),
           SafeArea(
             child: CustomScrollView(
               slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: LinerColors.accentPrimary,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'L',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 20,
-                                    color: Colors.white,
-                                    fontFamily: 'Inter',
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            const Text(
-                              'LINER',
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontWeight: FontWeight.w800,
-                                fontSize: 20,
-                                letterSpacing: 1.2,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.flash_on_rounded, color: Colors.amber, size: 22),
-                              onPressed: () {},
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 22),
-                              onPressed: () {},
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(20, 16, 20, 12),
-                        child: Row(
-                          children: [
-                            Icon(Icons.history_rounded, size: 20, color: LinerColors.accentPrimary),
-                            SizedBox(width: 8),
-                            Text(
-                              'Jump Back In',
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontWeight: FontWeight.w700,
-                                fontSize: 18,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      popularTracksAsync.when(
-                        data: (tracks) => SizedBox(
-                          height: 195,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            itemCount: tracks.length,
-                            itemBuilder: (context, index) {
-                              final track = tracks[index];
-                              return SongCard(
-                                title: track.title,
-                                subtitle: track.artistName,
-                                imageUrl: track.coverUrl,
-                                onTap: () => playerNotifier.playTrack(track, tracks, index),
-                                onPlay: () => playerNotifier.playTrack(track, tracks, index),
-                              );
-                            },
-                          ),
-                        ),
-                        loading: () => const SizedBox(
-                          height: 180,
-                          child: Center(child: CircularProgressIndicator(color: LinerColors.accentPrimary)),
-                        ),
-                        error: (_, __) => const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(20, 24, 20, 12),
-                        child: Row(
-                          children: [
-                            Icon(Icons.auto_awesome_rounded, size: 20, color: Colors.amber),
-                            SizedBox(width: 8),
-                            Text(
-                              'Made For You',
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontWeight: FontWeight.w700,
-                                fontSize: 18,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      dailyMixesAsync.when(
-                        data: (mixes) => SizedBox(
-                          height: 200,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            itemCount: mixes.length,
-                            itemBuilder: (context, index) {
-                              final mix = mixes[index];
-                              return SongCard(
-                                title: mix.name,
-                                subtitle: mix.description ?? '${mix.trackCount} tracks',
-                                imageUrl: mix.coverUrl,
-                                onTap: () {},
-                              );
-                            },
-                          ),
-                        ),
-                        loading: () => const SizedBox.shrink(),
-                        error: (_, __) => const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(20, 24, 20, 12),
-                        child: Text(
-                          'Popular Artists',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontWeight: FontWeight.w700,
-                            fontSize: 18,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        height: 160,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          itemCount: popularArtists.length,
-                          itemBuilder: (context, index) {
-                            final artist = popularArtists[index];
-                            return SongCard(
-                              title: artist.name,
-                              subtitle: artist.listenersFormatted,
-                              imageUrl: artist.avatarUrl,
-                              isCircular: true,
-                              width: 110,
-                              height: 110,
-                              onTap: () {},
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.local_fire_department_rounded, size: 22, color: LinerColors.accentPrimary),
-                            SizedBox(width: 8),
-                            Text(
-                              'Trending Now',
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontWeight: FontWeight.w700,
-                                fontSize: 18,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Text(
-                          'Top 20',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.5),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                popularTracksAsync.when(
-                  data: (tracks) => SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final track = tracks[index];
-                          final isCurrentPlaying = playerState.currentTrack?.id == track.id;
-                          return SongTile(
-                            track: track,
-                            rank: index + 1,
-                            isPlaying: isCurrentPlaying,
-                            isLiked: playerState.likedTrackIds.contains(track.id),
-                            onTap: () => playerNotifier.playTrack(track, tracks, index),
-                            onLikeToggle: () => playerNotifier.toggleLike(track.id),
-                          );
-                        },
-                        childCount: tracks.length,
-                      ),
-                    ),
-                  ),
-                  loading: () => const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(40),
-                      child: Center(child: CircularProgressIndicator(color: LinerColors.accentPrimary)),
-                    ),
-                  ),
-                  error: (e, _) => SliverToBoxAdapter(
-                    child: Center(child: Text('Failed to load tracks: $e', style: const TextStyle(color: Colors.white54))),
-                  ),
-                ),
+                const SliverToBoxAdapter(child: _Header()),
+                const SliverToBoxAdapter(child: _RecentlyPlayedSection()),
+                const SliverToBoxAdapter(child: _DailyMixesSection()),
                 const SliverToBoxAdapter(
-                  child: SizedBox(height: 100),
+                  child: _SectionTitle(
+                    icon: Icons.local_fire_department_rounded,
+                    iconColor: LinerColors.accentPrimary,
+                    title: 'Trending Now',
+                    top: 24,
+                  ),
                 ),
+                const _TrendingList(),
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+class _TimeOfDayGlow extends StatelessWidget {
+  const _TimeOfDayGlow();
+
+  static const _morning = [Color(0x33F59E0B), Color(0x1AF97316)];
+  static const _afternoon = [Color(0x33FBBF24), Color(0x1A0EA5E9)];
+  static const _evening = [Color(0x33F43F5E), Color(0x1AA855F7)];
+  static const _night = [Color(0x3D4F46E5), Color(0x267C3AED)];
+
+  List<Color> _colorsFor(int hour) {
+    if (hour >= 5 && hour < 12) return _morning;
+    if (hour >= 12 && hour < 17) return _afternoon;
+    if (hour >= 17 && hour < 22) return _evening;
+    return _night;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [..._colorsFor(DateTime.now().hour), Colors.transparent],
+        ),
+      ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 12),
+      child: Row(
+        children: [
+          LinerLogoTile(size: 34),
+          SizedBox(width: 10),
+          Text(
+            'LINER',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 20,
+              letterSpacing: 1.2,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    this.top = 16,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final double top;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, top, 20, 12),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: iconColor),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecentlyPlayedSection extends ConsumerWidget {
+  const _RecentlyPlayedSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref
+        .watch(recentlyPlayedProvider)
+        .when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, _) => ErrorRetry(
+            message: "Couldn't load your recently played tracks.",
+            onRetry: () => ref.invalidate(recentlyPlayedProvider),
+          ),
+          data: (tracks) {
+            if (tracks.isEmpty) return const SizedBox.shrink();
+            final player = ref.read(playerStateProvider.notifier);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _SectionTitle(
+                  icon: Icons.history_rounded,
+                  iconColor: LinerColors.accentPrimary,
+                  title: 'Jump Back In',
+                ),
+                SizedBox(
+                  height: 195,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: tracks.length,
+                    itemBuilder: (context, index) {
+                      final track = tracks[index];
+                      void play() => player.playTrack(track, tracks, index);
+                      return SongCard(
+                        title: track.title,
+                        subtitle: track.artistName,
+                        imageUrl: track.coverUrl,
+                        fallbackImageUrl: track.coverFallbackUrl,
+                        onTap: play,
+                        onPlay: play,
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+  }
+}
+
+class _DailyMixesSection extends ConsumerWidget {
+  const _DailyMixesSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref
+        .watch(dailyMixesProvider)
+        .when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, _) => ErrorRetry(
+            message: "Couldn't load your daily mixes.",
+            onRetry: () => ref.invalidate(dailyMixesProvider),
+          ),
+          data: (mixes) {
+            if (mixes.isEmpty) return const SizedBox.shrink();
+            final player = ref.read(playerStateProvider.notifier);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _SectionTitle(
+                  icon: Icons.auto_awesome_rounded,
+                  iconColor: Colors.amber,
+                  title: 'Made For You',
+                  top: 24,
+                ),
+                SizedBox(
+                  height: 200,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: mixes.length,
+                    itemBuilder: (context, index) {
+                      final mix = mixes[index];
+                      return SongCard(
+                        title: mix.title,
+                        subtitle:
+                            mix.description ??
+                            '${mix.trackCount ?? mix.tracks.length} tracks',
+                        imageUrl: mix.coverUrl,
+                        onTap: () => player.playAll(mix.tracks),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+  }
+}
+
+class _TrendingList extends ConsumerWidget {
+  const _TrendingList();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref
+        .watch(popularTracksProvider)
+        .when(
+          loading: () =>
+              const SliverToBoxAdapter(child: LoadingView(height: 160)),
+          error: (_, _) => SliverToBoxAdapter(
+            child: ErrorRetry(
+              message: "Couldn't load trending tracks.",
+              onRetry: () => ref.invalidate(popularTracksProvider),
+            ),
+          ),
+          data: (tracks) {
+            final player = ref.read(playerStateProvider.notifier);
+            return SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              sliver: SliverList.builder(
+                itemCount: tracks.length,
+                itemBuilder: (context, index) => SongTile(
+                  track: tracks[index],
+                  rank: index + 1,
+                  onTap: () => player.playTrack(tracks[index], tracks, index),
+                ),
+              ),
+            );
+          },
+        );
   }
 }

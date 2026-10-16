@@ -1,155 +1,188 @@
 import 'dart:async';
+import 'dart:developer' as developer;
+import 'dart:math';
+
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
-import '../core/models/track.dart';
+
+import '../core/api/liner_api.dart';
+import '../core/models/lyric.dart';
 import '../core/models/player_state.dart';
-import '../core/api/api_client.dart';
+import '../core/models/track.dart';
 
 class AudioPlayerService {
-  static AudioPlayerService? _instance;
-  final AudioPlayer _player = AudioPlayer();
+  AudioPlayerService(this._api, {AudioPlayer? player})
+    : _player = player ?? AudioPlayer() {
+    _subscriptions.addAll([
+      _player.positionStream.listen(
+        (position) => _emit(_currentState.copyWith(position: position)),
+      ),
+      _player.durationStream.listen((duration) {
+        if (duration != null) {
+          _emit(_currentState.copyWith(duration: duration));
+        }
+      }),
+      _player.playerStateStream.listen(_onPlayerState),
+    ]);
+  }
 
-  final List<Track> _queue = [];
-  int _currentIndex = 0;
-  bool _isShuffle = false;
-  LinerRepeatMode _repeatMode = LinerRepeatMode.off;
-
-  final _playerStateController = StreamController<PlayerStateData>.broadcast();
-  Stream<PlayerStateData> get stateStream => _playerStateController.stream;
+  final LinerApi _api;
+  final AudioPlayer _player;
+  final _random = Random();
+  final _queue = <Track>[];
+  final _subscriptions = <StreamSubscription<Object?>>[];
+  final _stateController = StreamController<PlayerStateData>.broadcast();
 
   PlayerStateData _currentState = const PlayerStateData();
+  int _currentIndex = 0;
+  int _playRequestId = 0;
+
+  Stream<PlayerStateData> get stateStream => _stateController.stream;
   PlayerStateData get currentState => _currentState;
 
-  StreamSubscription? _posSub;
-  StreamSubscription? _durSub;
-  StreamSubscription? _statusSub;
+  /// AVPlayer cannot decode WebM/Opus, so iOS asks the server for AAC.
+  static String? get _preferredCodec =>
+      defaultTargetPlatform == TargetPlatform.iOS ? 'aac' : null;
 
-  AudioPlayerService._() {
-    _initListeners();
+  void _emit(PlayerStateData state) {
+    _currentState = state;
+    _stateController.add(state);
   }
 
-  static AudioPlayerService get instance => _instance ??= AudioPlayerService._();
+  void _onPlayerState(PlayerState playerState) {
+    final processingState = playerState.processingState;
+    final current = _currentState.status;
 
-  void _initListeners() {
-    _posSub = _player.positionStream.listen((pos) {
-      _updateState(_currentState.copyWith(position: pos));
-    });
+    if (processingState == ProcessingState.idle &&
+        (current == PlaybackStatus.loading ||
+            current == PlaybackStatus.error)) {
+      return;
+    }
 
-    _durSub = _player.durationStream.listen((dur) {
-      if (dur != null) {
-        _updateState(_currentState.copyWith(duration: dur));
-      }
-    });
+    final status = switch (processingState) {
+      ProcessingState.loading ||
+      ProcessingState.buffering => PlaybackStatus.loading,
+      ProcessingState.completed => PlaybackStatus.completed,
+      _ => playerState.playing ? PlaybackStatus.playing : PlaybackStatus.paused,
+    };
+    final justCompleted =
+        status == PlaybackStatus.completed &&
+        current != PlaybackStatus.completed;
 
-    _statusSub = _player.playerStateStream.listen((ps) {
-      PlaybackStatus status;
-      if (ps.processingState == ProcessingState.loading ||
-          ps.processingState == ProcessingState.buffering) {
-        status = PlaybackStatus.loading;
-      } else if (ps.processingState == ProcessingState.completed) {
-        status = PlaybackStatus.completed;
-        _onTrackCompleted();
-      } else if (ps.playing) {
-        status = PlaybackStatus.playing;
-      } else {
-        status = PlaybackStatus.paused;
-      }
-      _updateState(_currentState.copyWith(status: status));
-    });
-  }
-
-  void _updateState(PlayerStateData newState) {
-    _currentState = newState;
-    _playerStateController.add(_currentState);
+    _emit(_currentState.copyWith(status: status));
+    if (justCompleted) _onTrackCompleted();
   }
 
   Future<void> setQueue(List<Track> tracks, {int startIndex = 0}) async {
-    _queue.clear();
-    _queue.addAll(tracks);
-    _currentIndex = startIndex.clamp(0, _queue.isNotEmpty ? _queue.length - 1 : 0);
-
-    _updateState(_currentState.copyWith(
-      queue: List.unmodifiable(_queue),
-      currentIndex: _currentIndex,
-    ));
-
-    if (_queue.isNotEmpty) {
-      await playTrack(_queue[_currentIndex]);
-    }
+    if (tracks.isEmpty) return;
+    _queue
+      ..clear()
+      ..addAll(tracks);
+    _currentIndex = startIndex.clamp(0, _queue.length - 1);
+    _emit(
+      _currentState.copyWith(
+        queue: List.unmodifiable(_queue),
+        currentIndex: _currentIndex,
+      ),
+    );
+    await playTrack(_queue[_currentIndex]);
   }
 
   Future<void> playTrack(Track track) async {
-    try {
-      _updateState(_currentState.copyWith(
+    final requestId = ++_playRequestId;
+    _emit(
+      _currentState.copyWith(
         currentTrack: track,
         status: PlaybackStatus.loading,
         position: Duration.zero,
         duration: Duration(milliseconds: track.durationMs),
-      ));
+        lyrics: const <LyricLine>[],
+        isLoadingLyrics: true,
+      ),
+    );
+    unawaited(_loadLyrics(track, requestId));
 
-      String streamUrl = track.streamUrl ?? '';
-      if (streamUrl.isEmpty) {
-        streamUrl = await ApiClient.instance.getPlaybackStreamUrl(track.id);
-      }
-
+    try {
+      await _player.stop();
+      final streamUrl = await _api.getStreamUrl(
+        track.id,
+        preferredCodec: _preferredCodec,
+      );
+      if (requestId != _playRequestId) return;
       await _player.setUrl(streamUrl);
-      await _player.play();
-
-      _loadLyricsForTrack(track.id, track.durationMs);
-    } catch (e) {
-      _updateState(_currentState.copyWith(status: PlaybackStatus.paused));
+      if (requestId != _playRequestId) return;
+      unawaited(_startPlayback(requestId));
+    } on Exception catch (error) {
+      if (requestId != _playRequestId) return;
+      developer.log('playTrack(${track.id}) failed: $error', name: 'Player');
+      _emit(_currentState.copyWith(status: PlaybackStatus.error));
     }
   }
 
-  Future<void> _loadLyricsForTrack(String trackId, int durationMs) async {
-    _updateState(_currentState.copyWith(isLoadingLyrics: true));
+  /// `AudioPlayer.play` completes only when playback pauses or ends, so it
+  /// must never be awaited by callers.
+  Future<void> _startPlayback(int requestId) async {
     try {
-      final lyrics = await ApiClient.instance.getLyrics(trackId, durationMs: durationMs);
-      _updateState(_currentState.copyWith(
-        lyrics: lyrics,
-        isLoadingLyrics: false,
-      ));
-    } catch (_) {
-      _updateState(_currentState.copyWith(isLoadingLyrics: false));
+      await _player.play();
+    } on Exception catch (error) {
+      if (requestId != _playRequestId) return;
+      developer.log('play failed: $error', name: 'Player');
+      _emit(_currentState.copyWith(status: PlaybackStatus.error));
     }
+  }
+
+  Future<void> _loadLyrics(Track track, int requestId) async {
+    var lyrics = const <LyricLine>[];
+    try {
+      lyrics = await _api.getLyrics(track.id, durationMs: track.durationMs);
+    } on Exception catch (error) {
+      developer.log('lyrics(${track.id}) failed: $error', name: 'Player');
+    }
+    if (requestId != _playRequestId) return;
+    _emit(_currentState.copyWith(lyrics: lyrics, isLoadingLyrics: false));
   }
 
   Future<void> play() async {
-    if (_currentState.currentTrack == null && _queue.isNotEmpty) {
-      await playTrack(_queue[_currentIndex]);
+    final track = _currentState.currentTrack;
+    if (track == null) {
+      if (_queue.isNotEmpty) await playTrack(_queue[_currentIndex]);
+    } else if (_currentState.hasError) {
+      await playTrack(track);
     } else {
-      await _player.play();
+      unawaited(_player.play());
     }
   }
 
-  Future<void> pause() async {
-    await _player.pause();
+  Future<void> stop() async {
+    _playRequestId++;
+    _queue.clear();
+    _currentIndex = 0;
+    await _player.stop();
+    _emit(const PlayerStateData());
   }
 
-  Future<void> togglePlayPause() async {
-    if (_player.playing) {
-      await pause();
-    } else {
-      await play();
-    }
-  }
+  Future<void> pause() => _player.pause();
 
-  Future<void> seek(Duration position) async {
-    await _player.seek(position);
-  }
+  Future<void> togglePlayPause() => _player.playing ? pause() : play();
+
+  Future<void> seek(Duration position) => _player.seek(position);
 
   Future<void> next() async {
-    if (_queue.isEmpty) return;
-    if (_currentIndex < _queue.length - 1) {
-      _currentIndex++;
-    } else {
-      if (_repeatMode == LinerRepeatMode.all) {
-        _currentIndex = 0;
-      } else {
-        return;
-      }
+    final target = _nextIndex();
+    if (target == null) return;
+    _currentIndex = target;
+    _emit(_currentState.copyWith(currentIndex: target));
+    await playTrack(_queue[target]);
+  }
+
+  int? _nextIndex() {
+    if (_queue.isEmpty) return null;
+    if (_currentState.isShuffle && _queue.length > 1) {
+      final pick = _random.nextInt(_queue.length - 1);
+      return pick >= _currentIndex ? pick + 1 : pick;
     }
-    _updateState(_currentState.copyWith(currentIndex: _currentIndex));
-    await playTrack(_queue[_currentIndex]);
+    if (_currentIndex < _queue.length - 1) return _currentIndex + 1;
+    return _currentState.repeatMode == LinerRepeatMode.all ? 0 : null;
   }
 
   Future<void> previous() async {
@@ -158,72 +191,51 @@ class AudioPlayerService {
       await seek(Duration.zero);
       return;
     }
-    if (_currentIndex > 0) {
-      _currentIndex--;
-    } else {
-      _currentIndex = _queue.length - 1;
-    }
-    _updateState(_currentState.copyWith(currentIndex: _currentIndex));
+    _currentIndex = _currentIndex > 0 ? _currentIndex - 1 : _queue.length - 1;
+    _emit(_currentState.copyWith(currentIndex: _currentIndex));
     await playTrack(_queue[_currentIndex]);
   }
 
   void toggleShuffle() {
-    _isShuffle = !_isShuffle;
-    _updateState(_currentState.copyWith(isShuffle: _isShuffle));
+    _emit(_currentState.copyWith(isShuffle: !_currentState.isShuffle));
   }
 
   void cycleRepeatMode() {
-    switch (_repeatMode) {
-      case LinerRepeatMode.off:
-        _repeatMode = LinerRepeatMode.all;
-        break;
-      case LinerRepeatMode.all:
-        _repeatMode = LinerRepeatMode.one;
-        break;
-      case LinerRepeatMode.one:
-        _repeatMode = LinerRepeatMode.off;
-        break;
-    }
-    _updateState(_currentState.copyWith(repeatMode: _repeatMode));
+    final next = switch (_currentState.repeatMode) {
+      LinerRepeatMode.off => LinerRepeatMode.all,
+      LinerRepeatMode.all => LinerRepeatMode.one,
+      LinerRepeatMode.one => LinerRepeatMode.off,
+    };
+    _emit(_currentState.copyWith(repeatMode: next));
   }
 
   Future<void> setSpeed(double speed) async {
     await _player.setSpeed(speed);
-    _updateState(_currentState.copyWith(playbackSpeed: speed));
+    _emit(_currentState.copyWith(playbackSpeed: speed));
   }
 
   Future<void> setPitch(double pitch) async {
     await _player.setPitch(pitch);
-    _updateState(_currentState.copyWith(pitch: pitch));
+    _emit(_currentState.copyWith(pitch: pitch));
   }
 
   void toggleLyrics() {
-    _updateState(_currentState.copyWith(isLyricsOpen: !_currentState.isLyricsOpen));
-  }
-
-  void toggleLike(String trackId) {
-    final currentLikes = Set<String>.from(_currentState.likedTrackIds);
-    if (currentLikes.contains(trackId)) {
-      currentLikes.remove(trackId);
-    } else {
-      currentLikes.add(trackId);
-    }
-    _updateState(_currentState.copyWith(likedTrackIds: currentLikes));
+    _emit(_currentState.copyWith(isLyricsOpen: !_currentState.isLyricsOpen));
   }
 
   void _onTrackCompleted() {
-    if (_repeatMode == LinerRepeatMode.one) {
-      seek(Duration.zero).then((_) => play());
+    if (_currentState.repeatMode == LinerRepeatMode.one) {
+      unawaited(seek(Duration.zero).then((_) => play()));
     } else {
-      next();
+      unawaited(next());
     }
   }
 
-  void dispose() {
-    _posSub?.cancel();
-    _durSub?.cancel();
-    _statusSub?.cancel();
-    _player.dispose();
-    _playerStateController.close();
+  Future<void> dispose() async {
+    for (final subscription in _subscriptions) {
+      await subscription.cancel();
+    }
+    await _player.dispose();
+    await _stateController.close();
   }
 }
