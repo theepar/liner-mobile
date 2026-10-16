@@ -4,15 +4,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/track.dart';
 import '../utils/lyric_parser.dart';
 
-const String kPrimaryApiUrl = 'https://api.tryliner.fun';
-const String kFallbackEdgeUrl = 'http://edge.tryliner.fun:10518';
-const String _kApiUrlPrefKey = 'liner_api_base_url';
-const String _kTokenPrefKey = 'liner_auth_token';
+const String primaryApiUrl = 'https://api.tryliner.fun';
+const String fallbackApiUrl = 'http://edge.tryliner.fun:10518';
+const String kPrimaryApiUrl = primaryApiUrl;
+const String kFallbackEdgeUrl = fallbackApiUrl;
+
+const String _apiUrlKey = 'liner_api_url';
+const String _tokenKey = 'liner_token';
 
 class ApiClient {
   static ApiClient? _instance;
   late final Dio _dio;
-  String _baseUrl = kPrimaryApiUrl;
+  String _baseUrl = primaryApiUrl;
   bool _isUsingFallback = false;
 
   ApiClient._() {
@@ -37,7 +40,7 @@ class ApiClient {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedUrl = prefs.getString(_kApiUrlPrefKey);
+    final savedUrl = prefs.getString(_apiUrlKey);
     if (savedUrl != null && savedUrl.isNotEmpty) {
       _baseUrl = savedUrl;
       _dio.options.baseUrl = _baseUrl;
@@ -50,33 +53,30 @@ class ApiClient {
     _baseUrl = url.replaceAll(RegExp(r'/+$'), '');
     _dio.options.baseUrl = _baseUrl;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kApiUrlPrefKey, _baseUrl);
+    await prefs.setString(_apiUrlKey, _baseUrl);
   }
 
   Future<String> probeEndpoint() async {
     try {
-      final probeDio = Dio(BaseOptions(
+      final probe = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 4),
         receiveTimeout: const Duration(seconds: 4),
       ));
-      final res = await probeDio.get('$kPrimaryApiUrl/health');
+      final res = await probe.get('$primaryApiUrl/health');
       if (res.statusCode == 200) {
-        _baseUrl = kPrimaryApiUrl;
+        _baseUrl = primaryApiUrl;
         _isUsingFallback = false;
         _dio.options.baseUrl = _baseUrl;
         return _baseUrl;
       }
-    } catch (_) {
-      // Primary failed, use fallback edge
-    }
+    } catch (_) {}
 
-    _baseUrl = kFallbackEdgeUrl;
+    _baseUrl = fallbackApiUrl;
     _isUsingFallback = true;
     _dio.options.baseUrl = _baseUrl;
     return _baseUrl;
   }
 
-  // ── Popular Tracks ────────────────────────────────────────────────
   Future<List<Track>> getPopularTracks({String period = '7d', int limit = 20}) async {
     try {
       final res = await _dio.get(
@@ -95,13 +95,10 @@ class ApiClient {
       } else if (res.data is List) {
         return (res.data as List).map((e) => Track.fromJson(e as Map<String, dynamic>)).toList();
       }
-    } catch (_) {
-      // Graceful fallback to rich mock data
-    }
-    return getFallbackPopularTracks();
+    } catch (_) {}
+    return defaultTracks();
   }
 
-  // ── Daily Mixes ──────────────────────────────────────────────────
   Future<List<Playlist>> getDailyMixes() async {
     try {
       final res = await _dio.get('/v1/me/daily-mixes');
@@ -113,10 +110,9 @@ class ApiClient {
         return (res.data as List).map((e) => Playlist.fromJson(e as Map<String, dynamic>)).toList();
       }
     } catch (_) {}
-    return getFallbackDailyMixes();
+    return defaultMixes();
   }
 
-  // ── Search ───────────────────────────────────────────────────────
   Future<Map<String, dynamic>> search(String query) async {
     if (query.trim().isEmpty) {
       return {'tracks': <Track>[], 'artists': <Artist>[], 'playlists': <Playlist>[]};
@@ -124,7 +120,7 @@ class ApiClient {
     try {
       final res = await _dio.get('/v1/search', queryParameters: {'q': query, 'type': 'all'});
       final data = res.data as Map<String, dynamic>;
-      
+
       final tracks = (data['tracks']?['items'] as List<dynamic>?)
               ?.map((e) => Track.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -140,8 +136,7 @@ class ApiClient {
 
       return {'tracks': tracks, 'artists': artists, 'playlists': playlists};
     } catch (_) {
-      // Filter fallback tracks by query
-      final all = getFallbackPopularTracks();
+      final all = defaultTracks();
       final filtered = all
           .where((t) =>
               t.title.toLowerCase().contains(query.toLowerCase()) ||
@@ -151,8 +146,9 @@ class ApiClient {
     }
   }
 
-  // ── Track Stream URL ─────────────────────────────────────────────
-  Future<String> getPlaybackStreamUrl(String trackId) async {
+  Future<String> getPlaybackStreamUrl(String trackId) => getStreamUrl(trackId);
+
+  Future<String> getStreamUrl(String trackId) async {
     try {
       final res = await _dio.post(
         '/v1/tracks/$trackId/playback',
@@ -162,11 +158,9 @@ class ApiClient {
         return res.data['url'] as String;
       }
     } catch (_) {}
-    // Return sample playable audio if unavailable
     return 'https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3';
   }
 
-  // ── Syllable-Synced Lyrics ───────────────────────────────────────
   Future<List<LyricLine>> getLyrics(String trackId, {int durationMs = 0}) async {
     try {
       final res = await _dio.get('/v1/tracks/$trackId/lyrics');
@@ -180,10 +174,9 @@ class ApiClient {
         return LyricParser.parse(raw, songDurationMs: durationMs);
       }
     } catch (_) {}
-    return getFallbackLyricsForTrack(trackId);
+    return defaultLyrics(trackId);
   }
 
-  // ── Liked Tracks ─────────────────────────────────────────────────
   Future<List<Track>> getLikedTracks() async {
     try {
       final res = await _dio.get('/v1/me/library/tracks');
@@ -193,11 +186,10 @@ class ApiClient {
             .toList();
       }
     } catch (_) {}
-    return getFallbackPopularTracks().take(3).toList();
+    return defaultTracks().take(3).toList();
   }
 
-  // ── Fallback Rich Mock Data ───────────────────────────────────────
-  static List<Track> getFallbackPopularTracks() => [
+  static List<Track> defaultTracks() => [
         const Track(
           id: 'liner_1',
           title: 'Blinding Lights',
@@ -255,7 +247,9 @@ class ApiClient {
         ),
       ];
 
-  static List<Playlist> getFallbackDailyMixes() => [
+  static List<Track> getFallbackPopularTracks() => defaultTracks();
+
+  static List<Playlist> defaultMixes() => [
         const Playlist(
           id: 'mix_1',
           name: 'Daily Mix 1',
@@ -279,7 +273,9 @@ class ApiClient {
         ),
       ];
 
-  static List<Artist> getFallbackPopularArtists() => [
+  static List<Playlist> getFallbackDailyMixes() => defaultMixes();
+
+  static List<Artist> defaultArtists() => [
         const Artist(
           id: 'art_1',
           name: 'The Weeknd',
@@ -300,8 +296,10 @@ class ApiClient {
         ),
       ];
 
-  static List<LyricLine> getFallbackLyricsForTrack(String trackId) => [
-        LyricLine(
+  static List<Artist> getFallbackPopularArtists() => defaultArtists();
+
+  static List<LyricLine> defaultLyrics(String trackId) => [
+        const LyricLine(
           startMs: 1000,
           endMs: 5000,
           text: "Yeah, I've been tryna call",
@@ -313,7 +311,7 @@ class ApiClient {
             LyricWord(startMs: 3900, endMs: 5000, text: "call"),
           ],
         ),
-        LyricLine(
+        const LyricLine(
           startMs: 5200,
           endMs: 9500,
           text: "I've been on my own for long enough",
@@ -328,7 +326,7 @@ class ApiClient {
             LyricWord(startMs: 9200, endMs: 9500, text: "enough"),
           ],
         ),
-        LyricLine(
+        const LyricLine(
           startMs: 9800,
           endMs: 14200,
           text: "Maybe you can show me how to love, maybe",
@@ -343,7 +341,7 @@ class ApiClient {
             LyricWord(startMs: 13800, endMs: 14200, text: "love, maybe"),
           ],
         ),
-        LyricLine(
+        const LyricLine(
           startMs: 14500,
           endMs: 19500,
           text: "I'm going through withdrawals",
@@ -354,7 +352,7 @@ class ApiClient {
             LyricWord(startMs: 17800, endMs: 19500, text: "withdrawals"),
           ],
         ),
-        LyricLine(
+        const LyricLine(
           startMs: 20000,
           endMs: 25000,
           text: "You don't even have to do too much",
@@ -368,7 +366,7 @@ class ApiClient {
             LyricWord(startMs: 24400, endMs: 25000, text: "too much"),
           ],
         ),
-        LyricLine(
+        const LyricLine(
           startMs: 25500,
           endMs: 31000,
           text: "You can turn me on with just a touch, baby",
@@ -383,7 +381,7 @@ class ApiClient {
             LyricWord(startMs: 30500, endMs: 31000, text: "a touch"),
           ],
         ),
-        LyricLine(
+        const LyricLine(
           startMs: 31500,
           endMs: 38000,
           text: "I said, ooh, I'm blinded by the lights",
@@ -398,7 +396,7 @@ class ApiClient {
             LyricWord(startMs: 37200, endMs: 38000, text: "lights"),
           ],
         ),
-        LyricLine(
+        const LyricLine(
           startMs: 38500,
           endMs: 45000,
           text: "No, I can't sleep until I feel your touch",
@@ -415,13 +413,15 @@ class ApiClient {
           ],
         ),
       ];
+
+  static List<LyricLine> getFallbackLyricsForTrack(String trackId) => defaultLyrics(trackId);
 }
 
 class _AuthInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(_kTokenPrefKey);
+    final token = prefs.getString(_tokenKey);
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
     }
