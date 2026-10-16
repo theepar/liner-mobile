@@ -30,13 +30,10 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Current page
           IndexedStack(
             index: _currentIndex,
             children: _screens,
           ),
-
-          // Docked MiniPlayer & Bottom Navigation Bar
           Positioned(
             left: 0,
             right: 0,
@@ -44,13 +41,10 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Persistent MiniPlayer bar
                 const MiniPlayer(),
-
-                // Bottom Navigation Bar
                 Container(
                   decoration: BoxDecoration(
-                    color: LinerColors.darkSurface.withOpacity(0.96),
+                    color: LinerColors.darkSurface.withValues(alpha: 0.96),
                     border: const Border(
                       top: BorderSide(color: LinerColors.darkBorderPrimary, width: 0.8),
                     ),
@@ -66,7 +60,7 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
                       elevation: 0,
                       type: BottomNavigationBarType.fixed,
                       selectedItemColor: LinerColors.accentPrimary,
-                      unselectedItemColor: Colors.white.withOpacity(0.4),
+                      unselectedItemColor: Colors.white.withValues(alpha: 0.4),
                       selectedFontSize: 11,
                       unselectedFontSize: 11,
                       selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontFamily: 'Inter'),

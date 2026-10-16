@@ -29,8 +29,6 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 24),
-
-            // ── API Server Backend Section ────────────────────────
             _buildSectionHeader('API BACKEND SERVER'),
             Container(
               decoration: BoxDecoration(
@@ -40,26 +38,28 @@ class SettingsScreen extends ConsumerWidget {
               ),
               child: Column(
                 children: [
-                  RadioListTile<String>(
-                    title: const Text('Primary Official API', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                    subtitle: const Text('https://api.tryliner.fun (Cloudflare)', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                    value: kPrimaryApiUrl,
+                  RadioGroup<String>(
                     groupValue: settings.currentBaseUrl,
-                    activeColor: LinerColors.accentPrimary,
                     onChanged: (val) {
                       if (val != null) notifier.setBaseUrl(val);
                     },
-                  ),
-                  const Divider(height: 1, color: LinerColors.darkBorderPrimary),
-                  RadioListTile<String>(
-                    title: const Text('Edge Relay Backup', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                    subtitle: const Text('http://edge.tryliner.fun:10518 (Direct IP fallback)', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                    value: kFallbackEdgeUrl,
-                    groupValue: settings.currentBaseUrl,
-                    activeColor: LinerColors.accentPrimary,
-                    onChanged: (val) {
-                      if (val != null) notifier.setBaseUrl(val);
-                    },
+                    child: const Column(
+                      children: [
+                        RadioListTile<String>(
+                          title: Text('Primary Official API', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                          subtitle: Text('https://api.tryliner.fun', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                          value: primaryApiUrl,
+                          activeColor: LinerColors.accentPrimary,
+                        ),
+                        Divider(height: 1, color: LinerColors.darkBorderPrimary),
+                        RadioListTile<String>(
+                          title: Text('Edge Relay Backup', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                          subtitle: Text('http://edge.tryliner.fun:10518', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                          value: fallbackApiUrl,
+                          activeColor: LinerColors.accentPrimary,
+                        ),
+                      ],
+                    ),
                   ),
                   const Divider(height: 1, color: LinerColors.darkBorderPrimary),
                   ListTile(
@@ -86,8 +86,6 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 24),
-
-            // ── Audio Quality Section ─────────────────────────────
             _buildSectionHeader('AUDIO STREAMING QUALITY'),
             Container(
               decoration: BoxDecoration(
@@ -95,43 +93,35 @@ class SettingsScreen extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: LinerColors.darkBorderSecondary),
               ),
-              child: Column(
-                children: [
-                  RadioListTile<String>(
-                    title: const Text('High Quality (Opus 320 kbps)', style: TextStyle(color: Colors.white, fontSize: 14)),
-                    value: 'high',
-                    groupValue: settings.audioQuality,
-                    activeColor: LinerColors.accentPrimary,
-                    onChanged: (val) {
-                      if (val != null) notifier.setAudioQuality(val);
-                    },
-                  ),
-                  const Divider(height: 1, color: LinerColors.darkBorderPrimary),
-                  RadioListTile<String>(
-                    title: const Text('Medium Quality (Opus 160 kbps)', style: TextStyle(color: Colors.white, fontSize: 14)),
-                    value: 'medium',
-                    groupValue: settings.audioQuality,
-                    activeColor: LinerColors.accentPrimary,
-                    onChanged: (val) {
-                      if (val != null) notifier.setAudioQuality(val);
-                    },
-                  ),
-                  const Divider(height: 1, color: LinerColors.darkBorderPrimary),
-                  RadioListTile<String>(
-                    title: const Text('Normal (AAC 128 kbps)', style: TextStyle(color: Colors.white, fontSize: 14)),
-                    value: 'normal',
-                    groupValue: settings.audioQuality,
-                    activeColor: LinerColors.accentPrimary,
-                    onChanged: (val) {
-                      if (val != null) notifier.setAudioQuality(val);
-                    },
-                  ),
-                ],
+              child: RadioGroup<String>(
+                groupValue: settings.audioQuality,
+                onChanged: (val) {
+                  if (val != null) notifier.setAudioQuality(val);
+                },
+                child: const Column(
+                  children: [
+                    RadioListTile<String>(
+                      title: Text('High Quality (Opus 320 kbps)', style: TextStyle(color: Colors.white, fontSize: 14)),
+                      value: 'high',
+                      activeColor: LinerColors.accentPrimary,
+                    ),
+                    Divider(height: 1, color: LinerColors.darkBorderPrimary),
+                    RadioListTile<String>(
+                      title: Text('Medium Quality (Opus 160 kbps)', style: TextStyle(color: Colors.white, fontSize: 14)),
+                      value: 'medium',
+                      activeColor: LinerColors.accentPrimary,
+                    ),
+                    Divider(height: 1, color: LinerColors.darkBorderPrimary),
+                    RadioListTile<String>(
+                      title: Text('Normal (AAC 128 kbps)', style: TextStyle(color: Colors.white, fontSize: 14)),
+                      value: 'normal',
+                      activeColor: LinerColors.accentPrimary,
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 24),
-
-            // ── Storage / Cache Section ───────────────────────────
             _buildSectionHeader('CACHE & STORAGE'),
             Container(
               decoration: BoxDecoration(
@@ -156,8 +146,6 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 24),
-
-            // ── About Liner Mobile ────────────────────────────────
             _buildSectionHeader('ABOUT'),
             Container(
               padding: const EdgeInsets.all(16),
@@ -188,15 +176,15 @@ class SettingsScreen extends ConsumerWidget {
                         children: [
                           Text('Liner Mobile', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
                           SizedBox(height: 2),
-                          Text('Version 1.0.4 (Build 42)', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                          Text('Version 1.0.4', style: TextStyle(color: Colors.white54, fontSize: 12)),
                         ],
                       ),
                     ],
                   ),
                   const SizedBox(height: 14),
-                  const Text(
+                  Text(
                     'Modern music streaming player with syllable-synced lyrics and reactive dynamic visuals. Built with Flutter, mirroring the official Liner Desktop experience.',
-                    style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13, height: 1.4),
                   ),
                   const SizedBox(height: 12),
                   const Text(
@@ -222,7 +210,7 @@ class SettingsScreen extends ConsumerWidget {
           fontWeight: FontWeight.w600,
           fontSize: 11,
           letterSpacing: 1.1,
-          color: Colors.white.withOpacity(0.4),
+          color: Colors.white.withValues(alpha: 0.4),
         ),
       ),
     );

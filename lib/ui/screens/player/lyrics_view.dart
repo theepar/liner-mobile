@@ -27,7 +27,6 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
     if (_lastActiveIndex == index) return;
     _lastActiveIndex = index;
 
-    // Approximate item height ~65px
     const itemHeight = 65.0;
     final targetOffset = (index * itemHeight) - 150.0;
     final clampedOffset = targetOffset.clamp(
@@ -73,7 +72,7 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.mic_off_rounded, size: 48, color: LinerColors.darkTextTertiary.withOpacity(0.5)),
+            Icon(Icons.mic_off_rounded, size: 48, color: LinerColors.darkTextTertiary.withValues(alpha: 0.5)),
             const SizedBox(height: 12),
             const Text(
               'No synchronized lyrics available for this track',
@@ -117,7 +116,6 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
   }
 
   Widget _buildLyricLine(LyricLine line, bool isActive, bool isPassed, int currentMs) {
-    // If the line has word/syllable timing, render syllable karaoke highlights!
     if (line.words.isNotEmpty && isActive) {
       return Wrap(
         children: line.words.map((word) {
@@ -136,8 +134,8 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
                 colors: [
                   Colors.white,
                   Colors.white,
-                  Colors.white.withOpacity(0.35),
-                  Colors.white.withOpacity(0.35),
+                  Colors.white.withValues(alpha: 0.35),
+                  Colors.white.withValues(alpha: 0.35),
                 ],
               ).createShader(bounds);
             },
@@ -157,7 +155,6 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
       );
     }
 
-    // Default line rendering
     return AnimatedDefaultTextStyle(
       duration: const Duration(milliseconds: 200),
       style: TextStyle(
@@ -166,7 +163,7 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
         fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
         color: isActive
             ? Colors.white
-            : (isPassed ? Colors.white.withOpacity(0.3) : Colors.white.withOpacity(0.4)),
+            : (isPassed ? Colors.white.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.4)),
         height: 1.35,
         letterSpacing: -0.3,
       ),

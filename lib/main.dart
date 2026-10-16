@@ -8,7 +8,6 @@ import 'ui/navigation/main_navigation_shell.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Dark immersive status bar and navigation bar styling
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
@@ -16,7 +15,6 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
 
-  // Initialize API client and probe endpoints
   await ApiClient.instance.init();
 
   runApp(

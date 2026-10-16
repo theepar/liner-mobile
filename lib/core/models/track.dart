@@ -28,7 +28,6 @@ class Track {
   });
 
   factory Track.fromJson(Map<String, dynamic> json) {
-    // Artist extraction
     String artist = 'Unknown Artist';
     String? aId;
     if (json['artist'] is Map<String, dynamic>) {
@@ -40,7 +39,6 @@ class Track {
       artist = json['artist'] as String;
     }
 
-    // Album extraction
     String? album;
     String? alId;
     if (json['album'] is Map<String, dynamic>) {
@@ -50,7 +48,6 @@ class Track {
       album = json['album'] as String;
     }
 
-    // Cover URL
     String cover = '';
     if (json['cover'] is Map<String, dynamic>) {
       cover = json['cover']['url']?.toString() ?? '';

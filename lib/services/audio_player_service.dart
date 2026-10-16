@@ -86,7 +86,6 @@ class AudioPlayerService {
         duration: Duration(milliseconds: track.durationMs),
       ));
 
-      // Resolve stream URL
       String streamUrl = track.streamUrl ?? '';
       if (streamUrl.isEmpty) {
         streamUrl = await ApiClient.instance.getPlaybackStreamUrl(track.id);
@@ -95,10 +94,8 @@ class AudioPlayerService {
       await _player.setUrl(streamUrl);
       await _player.play();
 
-      // Fetch lyrics in background
       _loadLyricsForTrack(track.id, track.durationMs);
     } catch (e) {
-      // In case of playback failure, mark as paused
       _updateState(_currentState.copyWith(status: PlaybackStatus.paused));
     }
   }

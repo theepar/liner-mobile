@@ -42,7 +42,6 @@ class FullscreenPlayer extends ConsumerWidget {
         child: SafeArea(
           child: Column(
             children: [
-              // ── Top Bar ──────────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
@@ -87,8 +86,6 @@ class FullscreenPlayer extends ConsumerWidget {
                   ],
                 ),
               ),
-
-              // ── Middle Area (Album Cover or Lyrics) ───────────────
               Expanded(
                 child: isLyricsOpen
                     ? const LyricsView()
@@ -130,8 +127,6 @@ class FullscreenPlayer extends ConsumerWidget {
                         ),
                       ),
               ),
-
-              // ── Track Title & Artist & Like Button ────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
                 child: Row(
@@ -179,8 +174,6 @@ class FullscreenPlayer extends ConsumerWidget {
                   ],
                 ),
               ),
-
-              // ── Timeline Slider ──────────────────────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
@@ -230,14 +223,11 @@ class FullscreenPlayer extends ConsumerWidget {
                   ],
                 ),
               ),
-
-              // ── Primary Playback Controls ─────────────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    // Shuffle
                     IconButton(
                       icon: Icon(
                         Icons.shuffle_rounded,
@@ -247,13 +237,11 @@ class FullscreenPlayer extends ConsumerWidget {
                       splashRadius: 22,
                       onPressed: () => notifier.toggleShuffle(),
                     ),
-                    // Previous
                     IconButton(
                       icon: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 36),
                       splashRadius: 26,
                       onPressed: () => notifier.previous(),
                     ),
-                    // Play / Pause (Liner Primary Red button)
                     GestureDetector(
                       onTap: () => notifier.togglePlayPause(),
                       child: Container(
@@ -288,13 +276,11 @@ class FullscreenPlayer extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    // Next
                     IconButton(
                       icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 36),
                       splashRadius: 26,
                       onPressed: () => notifier.next(),
                     ),
-                    // Repeat
                     IconButton(
                       icon: Icon(
                         playerState.repeatMode == LinerRepeatMode.one
@@ -311,14 +297,11 @@ class FullscreenPlayer extends ConsumerWidget {
                   ],
                 ),
               ),
-
-              // ── Bottom Utility Row (Lyrics, Speed/Pitch, Queue) ───
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Lyrics toggle button
                     IconButton(
                       icon: Icon(
                         Icons.mic_rounded,
@@ -328,7 +311,6 @@ class FullscreenPlayer extends ConsumerWidget {
                       splashRadius: 22,
                       onPressed: () => notifier.toggleLyrics(),
                     ),
-                    // Speed / Pitch adjustment button (tempo & pitch shift)
                     TextButton.icon(
                       style: TextButton.styleFrom(
                         foregroundColor: Colors.white70,
@@ -343,7 +325,6 @@ class FullscreenPlayer extends ConsumerWidget {
                       ),
                       onPressed: () => _showSpeedPitchDialog(context, ref, playerState),
                     ),
-                    // Queue list button
                     IconButton(
                       icon: const Icon(Icons.queue_music_rounded, color: Colors.white60, size: 24),
                       splashRadius: 22,

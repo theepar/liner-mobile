@@ -47,7 +47,6 @@ class SongTile extends StatelessWidget {
               ),
               const SizedBox(width: 4),
             ],
-            // Cover thumbnail
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: CachedNetworkImage(
@@ -69,7 +68,6 @@ class SongTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            // Title & Artist
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -95,7 +93,7 @@ class SongTile extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                           decoration: BoxDecoration(
-                            color: LinerColors.darkTextTertiary.withOpacity(0.3),
+                            color: LinerColors.darkTextTertiary.withValues(alpha: 0.3),
                             borderRadius: BorderRadius.circular(3),
                           ),
                           child: const Text(
@@ -121,7 +119,6 @@ class SongTile extends StatelessWidget {
                 ],
               ),
             ),
-            // Like button
             if (onLikeToggle != null)
               IconButton(
                 icon: Icon(
@@ -132,7 +129,6 @@ class SongTile extends StatelessWidget {
                 splashRadius: 20,
                 onPressed: onLikeToggle,
               ),
-            // Overflow options
             if (onMoreOptions != null)
               IconButton(
                 icon: const Icon(

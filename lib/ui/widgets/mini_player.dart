@@ -40,12 +40,12 @@ class MiniPlayer extends ConsumerWidget {
         child: Container(
           height: 60,
           decoration: BoxDecoration(
-            color: LinerColors.darkElevated.withOpacity(0.95),
+            color: LinerColors.darkElevated.withValues(alpha: 0.95),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: LinerColors.darkBorderSecondary.withOpacity(0.8), width: 1),
+            border: Border.all(color: LinerColors.darkBorderSecondary.withValues(alpha: 0.8), width: 1),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
               ),
@@ -55,12 +55,10 @@ class MiniPlayer extends ConsumerWidget {
             borderRadius: BorderRadius.circular(12),
             child: Stack(
               children: [
-                // Main content row
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: Row(
                     children: [
-                      // Album Cover Thumbnail
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: CachedNetworkImage(
@@ -82,7 +80,6 @@ class MiniPlayer extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      // Title & Artist
                       Expanded(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -114,7 +111,6 @@ class MiniPlayer extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      // Like button
                       IconButton(
                         icon: Icon(
                           playerState.isCurrentLiked
@@ -130,7 +126,6 @@ class MiniPlayer extends ConsumerWidget {
                           ref.read(playerStateProvider.notifier).toggleLike(track.id);
                         },
                       ),
-                      // Play / Pause button
                       IconButton(
                         icon: playerState.isBuffering
                             ? const SizedBox(
@@ -151,7 +146,6 @@ class MiniPlayer extends ConsumerWidget {
                           ref.read(playerStateProvider.notifier).togglePlayPause();
                         },
                       ),
-                      // Next track button
                       IconButton(
                         icon: const Icon(
                           Icons.skip_next_rounded,
@@ -166,14 +160,13 @@ class MiniPlayer extends ConsumerWidget {
                     ],
                   ),
                 ),
-                // Bottom thin linear progress indicator
                 Positioned(
                   left: 0,
                   right: 0,
                   bottom: 0,
                   child: LinearProgressIndicator(
                     value: progress,
-                    backgroundColor: Colors.white.withOpacity(0.08),
+                    backgroundColor: Colors.white.withValues(alpha: 0.08),
                     valueColor: const AlwaysStoppedAnimation<Color>(LinerColors.accentPrimary),
                     minHeight: 2.2,
                   ),

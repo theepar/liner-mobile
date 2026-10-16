@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/models/track.dart';
 import '../../../providers/music_provider.dart';
 import '../../../providers/player_provider.dart';
 import '../../widgets/song_card.dart';
@@ -50,7 +49,6 @@ class HomeScreen extends ConsumerWidget {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Ambient time glow
           Positioned(
             top: 0,
             left: 0,
@@ -60,11 +58,9 @@ class HomeScreen extends ConsumerWidget {
               decoration: BoxDecoration(gradient: _getTimeOfDayGlow()),
             ),
           ),
-          // Scrollable Content
           SafeArea(
             child: CustomScrollView(
               slivers: [
-                // App Bar with Liner brand
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
@@ -121,8 +117,6 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-
-                // Jump Back In (Quick recent tracks carousel)
                 SliverToBoxAdapter(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -173,8 +167,6 @@ class HomeScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-
-                // Daily Mixes Section
                 SliverToBoxAdapter(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,8 +213,6 @@ class HomeScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-
-                // Popular Artists Section
                 SliverToBoxAdapter(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,8 +252,6 @@ class HomeScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-
-                // Trending Now / Top Tracks List
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
@@ -291,14 +279,13 @@ class HomeScreen extends ConsumerWidget {
                             fontFamily: 'Inter',
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
-                            color: Colors.white.withOpacity(0.5),
+                            color: Colors.white.withValues(alpha: 0.5),
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-
                 popularTracksAsync.when(
                   data: (tracks) => SliverPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -330,7 +317,6 @@ class HomeScreen extends ConsumerWidget {
                     child: Center(child: Text('Failed to load tracks: $e', style: const TextStyle(color: Colors.white54))),
                   ),
                 ),
-
                 const SliverToBoxAdapter(
                   child: SizedBox(height: 100),
                 ),

@@ -16,7 +16,7 @@ class LibraryScreen extends ConsumerStatefulWidget {
 
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   int _selectedTabIndex = 0;
-  final List<String> _tabs = ['All', 'Liked Songs', 'Playlists', 'Artists'];
+  final List<String> _tabs = const ['All', 'Liked Songs', 'Playlists', 'Artists'];
 
   final List<Playlist> _customPlaylists = [
     const Playlist(
@@ -48,7 +48,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header: "Your Library" + Add Playlist button
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
               child: Row(
@@ -71,8 +70,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ],
               ),
             ),
-
-            // Filter Tabs
             SizedBox(
               height: 38,
               child: ListView.builder(
@@ -110,13 +107,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               ),
             ),
             const SizedBox(height: 12),
-
-            // Tab Content
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                 children: [
-                  // Liked Songs Hero Card (Show in 'All' or 'Liked Songs')
                   if (_selectedTabIndex == 0 || _selectedTabIndex == 1) ...[
                     GestureDetector(
                       onTap: () {
@@ -137,7 +131,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF831843).withOpacity(0.3),
+                              color: const Color(0xFF831843).withValues(alpha: 0.3),
                               blurRadius: 16,
                               offset: const Offset(0, 6),
                             ),
@@ -149,7 +143,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                               width: 56,
                               height: 56,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
+                                color: Colors.white.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Icon(Icons.favorite_rounded, color: LinerColors.accentPrimary, size: 30),
@@ -174,7 +168,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                                     style: TextStyle(
                                       fontFamily: 'Inter',
                                       fontSize: 13,
-                                      color: Colors.white.withOpacity(0.7),
+                                      color: Colors.white.withValues(alpha: 0.7),
                                     ),
                                   ),
                                 ],
@@ -194,8 +188,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     ),
                     const SizedBox(height: 20),
                   ],
-
-                  // Playlists Section (Show in 'All' or 'Playlists')
                   if (_selectedTabIndex == 0 || _selectedTabIndex == 2) ...[
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -228,8 +220,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                         )),
                     const SizedBox(height: 16),
                   ],
-
-                  // Artists Section (Show in 'All' or 'Artists')
                   if (_selectedTabIndex == 0 || _selectedTabIndex == 3) ...[
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -261,8 +251,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                           onTap: () {},
                         )),
                   ],
-
-                  // Liked Songs Detailed List in 'Liked Songs' Tab
                   if (_selectedTabIndex == 1) ...[
                     popularTracksAsync.when(
                       data: (List<Track> tracks) => Column(

@@ -1,41 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 
-/// Design tokens mirroring Liner Desktop globals.css
 class LinerColors {
-  // ── Dark Theme (primary) ──────────────────────────────────────────
-  static const darkCanvas   = Color(0xFF000000);
-  static const darkSurface  = Color(0xFF0A0A0A);
-  static const darkPrimary  = Color(0xFF0A0A0A);
+  static const darkCanvas = Color(0xFF000000);
+  static const darkSurface = Color(0xFF0A0A0A);
+  static const darkPrimary = Color(0xFF0A0A0A);
   static const darkElevated = Color(0xFF141414);
-  static const darkPanel    = Color(0xFF1A1A1A);
+  static const darkPanel = Color(0xFF1A1A1A);
 
-  static const darkTextPrimary   = Color(0xFFFFFFFF);
-  static const darkTextSecondary = Color(0xA6FFFFFF); // ~65%
-  static const darkTextTertiary  = Color(0x73FFFFFF); // ~45%
+  static const darkTextPrimary = Color(0xFFFFFFFF);
+  static const darkTextSecondary = Color(0xA6FFFFFF);
+  static const darkTextTertiary = Color(0x73FFFFFF);
 
-  static const darkBorderPrimary   = Color(0xFF1A1A1A);
+  static const darkBorderPrimary = Color(0xFF1A1A1A);
   static const darkBorderSecondary = Color(0xFF262626);
 
-  // ── Light Theme ───────────────────────────────────────────────────
-  static const lightCanvas   = Color(0xFFE4E4E7);
-  static const lightSurface  = Color(0xFFFFFFFF);
-  static const lightPrimary  = Color(0xFFF5F5F7);
+  static const lightCanvas = Color(0xFFE4E4E7);
+  static const lightSurface = Color(0xFFFFFFFF);
+  static const lightPrimary = Color(0xFFF5F5F7);
   static const lightElevated = Color(0xFFE6E6EB);
-  static const lightPanel    = Color(0xFFDEDEE3);
+  static const lightPanel = Color(0xFFDEDEE3);
 
-  static const lightTextPrimary   = Color(0xFF18181B);
-  static const lightTextSecondary = Color(0xA618181B); // ~65%
-  static const lightTextTertiary  = Color(0x7318181B); // ~45%
+  static const lightTextPrimary = Color(0xFF18181B);
+  static const lightTextSecondary = Color(0xA618181B);
+  static const lightTextTertiary = Color(0x7318181B);
 
-  static const lightBorderPrimary   = Color(0xFFE4E4E7);
+  static const lightBorderPrimary = Color(0xFFE4E4E7);
   static const lightBorderSecondary = Color(0xFFD4D4D8);
 
-  // ── Accent (shared) ───────────────────────────────────────────────
-  static const accentPrimary   = Color(0xFFFF3B3B);
+  static const accentPrimary = Color(0xFFFF3B3B);
   static const accentSecondary = Color(0xFFFF5C5C);
-  static const accentTertiary  = Color(0xFFFF7D7D);
-  static const accentWarning   = Color(0xFFD97706);
+  static const accentTertiary = Color(0xFFFF7D7D);
+  static const accentWarning = Color(0xFFD97706);
 }
 
 class LinerTheme {

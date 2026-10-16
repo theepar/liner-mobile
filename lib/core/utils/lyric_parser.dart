@@ -2,13 +2,11 @@ import 'dart:convert';
 import '../models/track.dart';
 
 class LyricParser {
-  /// Parses raw lyrics string in either Richsync JSON, Musixmatch JSON, LRC, or plain text
   static List<LyricLine> parse(String raw, {int songDurationMs = 0}) {
     if (raw.trim().isEmpty) return [];
 
     final trimmed = raw.trim();
 
-    // 1. Try parse Richsync / Musixmatch JSON
     if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
       final jsonLines = _tryParseJson(trimmed);
       if (jsonLines != null && jsonLines.isNotEmpty) {
@@ -16,13 +14,11 @@ class LyricParser {
       }
     }
 
-    // 2. Try parse standard / enhanced LRC format: [01:23.45] text
     final lrcLines = _tryParseLrc(trimmed, songDurationMs);
     if (lrcLines.isNotEmpty) {
       return lrcLines;
     }
 
-    // 3. Fallback: plain text without timestamps
     return _parsePlainText(trimmed, songDurationMs);
   }
 
@@ -30,7 +26,6 @@ class LyricParser {
     try {
       final dynamic decoded = jsonDecode(raw);
       if (decoded is List) {
-        // Richsync format
         if (decoded.isNotEmpty && decoded.first is Map && (decoded.first['ts'] != null || decoded.first['time'] != null)) {
           final List<LyricLine> result = [];
           for (int i = 0; i < decoded.length; i++) {
@@ -43,7 +38,6 @@ class LyricParser {
             final int startMs = (ts * 1000).round();
             final int endMs = (te * 1000).round();
 
-            // Word-level syllables
             final List<LyricWord> words = [];
             if (item['l'] is List) {
               final wordsArray = item['l'] as List<dynamic>;
@@ -53,8 +47,7 @@ class LyricParser {
                   final String wordText = w['c']?.toString() ?? '';
                   final double rawOffset = (w['o'] as num?)?.toDouble() ?? ts;
                   final int wordStartMs = rawOffset >= ts ? (rawOffset * 1000).round() : startMs + (rawOffset * 1000).round();
-                  
-                  // Word end is next word offset or line end
+
                   int wordEndMs = endMs;
                   if (wIdx + 1 < wordsArray.length && wordsArray[wIdx + 1] is Map) {
                     final nextOffset = (wordsArray[wIdx + 1]['o'] as num?)?.toDouble();
@@ -104,8 +97,6 @@ class LyricParser {
         final startMs = (min * 60 + sec) * 1000 + frac;
 
         final rawText = line.substring(match.end).trim();
-
-        // Check if there are word tags inside the line: <01:23.45> word
         final wordMatches = wordTagRegExp.allMatches(rawText);
         final List<LyricWord> words = [];
 
@@ -118,11 +109,10 @@ class LyricParser {
             final wText = wm.group(4) ?? '';
             words.add(LyricWord(
               startMs: wStart,
-              endMs: wStart + 500, // estimated
+              endMs: wStart + 500,
               text: wText,
             ));
           }
-          // Adjust endMs of each word
           for (int i = 0; i < words.length - 1; i++) {
             words[i] = LyricWord(
               startMs: words[i].startMs,
@@ -136,14 +126,13 @@ class LyricParser {
 
         result.add(LyricLine(
           startMs: startMs,
-          endMs: startMs + 4000, // temporary, fixed below
+          endMs: startMs + 4000,
           text: cleanText,
           words: words,
         ));
       }
     }
 
-    // Set endMs for each line based on the start of the next line
     for (int i = 0; i < result.length; i++) {
       final nextStart = (i + 1 < result.length)
           ? result[i + 1].startMs
@@ -174,7 +163,6 @@ class LyricParser {
     });
   }
 
-  /// Finds current active lyric line index for given milliseconds
   static int findActiveLineIndex(List<LyricLine> lines, int currentMs) {
     if (lines.isEmpty) return -1;
     if (currentMs < lines.first.startMs) return 0;
@@ -193,7 +181,6 @@ class LyricParser {
     return 0;
   }
 
-  /// Calculates karaoke progress (0.0 to 1.0) of a single syllable/word
   static double getWordProgress(LyricWord word, int currentMs) {
     if (currentMs <= word.startMs) return 0.0;
     if (currentMs >= word.endMs) return 1.0;

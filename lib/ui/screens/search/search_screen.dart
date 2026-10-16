@@ -46,7 +46,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Search Header Title
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 16, 20, 12),
               child: Text(
@@ -60,7 +59,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 ),
               ),
             ),
-            // Search Input Bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
               child: Container(
@@ -95,8 +93,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               ),
             ),
             const SizedBox(height: 12),
-
-            // Content: Categories or Search Results
             Expanded(
               child: searchState.isLoading
                   ? const Center(child: CircularProgressIndicator(color: LinerColors.accentPrimary))

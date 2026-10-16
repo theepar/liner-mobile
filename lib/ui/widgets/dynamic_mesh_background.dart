@@ -59,9 +59,7 @@ class _DynamicMeshBackgroundState extends State<DynamicMeshBackground>
 
         return Stack(
           children: [
-            // Dark base canvas
             Container(color: Colors.black),
-            // Floating ambient blob 1
             Positioned(
               top: -60 + (y1 * 80),
               left: -60 + (x1 * 80),
@@ -72,14 +70,13 @@ class _DynamicMeshBackgroundState extends State<DynamicMeshBackground>
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      widget.primaryColor.withOpacity(0.45),
+                      widget.primaryColor.withValues(alpha: 0.45),
                       Colors.transparent,
                     ],
                   ),
                 ),
               ),
             ),
-            // Floating ambient blob 2
             Positioned(
               bottom: 60 - (y1 * 70),
               right: -50 - (x1 * 70),
@@ -90,14 +87,13 @@ class _DynamicMeshBackgroundState extends State<DynamicMeshBackground>
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      widget.secondaryColor.withOpacity(0.35),
+                      widget.secondaryColor.withValues(alpha: 0.35),
                       Colors.transparent,
                     ],
                   ),
                 ),
               ),
             ),
-            // Floating subtle center glow
             Center(
               child: Container(
                 width: 250,
@@ -106,20 +102,18 @@ class _DynamicMeshBackgroundState extends State<DynamicMeshBackground>
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      widget.primaryColor.withOpacity(0.15),
+                      widget.primaryColor.withValues(alpha: 0.15),
                       Colors.transparent,
                     ],
                   ),
                 ),
               ),
             ),
-            // Blur backdrop filter to smooth everything out
             Positioned.fill(
               child: Container(
-                color: Colors.black.withOpacity(0.55),
+                color: Colors.black.withValues(alpha: 0.55),
               ),
             ),
-            // Content layer
             Positioned.fill(child: widget.child),
           ],
         );

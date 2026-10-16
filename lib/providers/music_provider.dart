@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api/api_client.dart';
 import '../core/models/track.dart';
 
-// ── Home Data Providers ─────────────────────────────────────────────
 final popularTracksProvider = FutureProvider<List<Track>>((ref) async {
   return await ApiClient.instance.getPopularTracks(period: '7d', limit: 20);
 });
@@ -16,10 +15,9 @@ final dailyMixesProvider = FutureProvider<List<Playlist>>((ref) async {
 });
 
 final popularArtistsProvider = Provider<List<Artist>>((ref) {
-  return ApiClient.getFallbackPopularArtists();
+  return ApiClient.defaultArtists();
 });
 
-// ── Search State Provider ───────────────────────────────────────────
 class SearchState {
   final String query;
   final bool isLoading;
@@ -82,11 +80,10 @@ class SearchNotifier extends StateNotifier<SearchState> {
   }
 }
 
-// ── Settings / Endpoint Provider ────────────────────────────────────
 class SettingsState {
   final String currentBaseUrl;
   final bool isUsingFallback;
-  final String audioQuality; // 'high', 'medium', 'normal'
+  final String audioQuality;
 
   const SettingsState({
     required this.currentBaseUrl,
