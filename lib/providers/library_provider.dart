@@ -5,7 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api/api_client.dart';
 import '../core/api/liner_api.dart';
+import '../core/models/album.dart';
 import '../core/models/artist.dart';
+import '../core/models/artist_details.dart';
+import '../core/models/collection_type.dart';
 import '../core/models/playlist.dart';
 import '../core/models/track.dart';
 import 'api_provider.dart';
@@ -20,6 +23,64 @@ final followedArtistsProvider = FutureProvider<List<Artist>>((ref) {
   ref.watch(userIdProvider);
   return ref.watch(linerApiProvider).getFollowedArtists();
 });
+
+final savedAlbumsProvider = FutureProvider<List<Album>>((ref) {
+  ref.watch(userIdProvider);
+  return ref.watch(linerApiProvider).getSavedAlbums();
+});
+
+final savedPlaylistsProvider = FutureProvider<List<Playlist>>((ref) {
+  ref.watch(userIdProvider);
+  return ref.watch(linerApiProvider).getSavedPlaylists();
+});
+
+/// Ids of the albums, artists or playlists the user has saved.
+final savedIdsProvider = Provider.family<Set<String>, CollectionType>(
+  (ref, type) => switch (type) {
+    CollectionType.albums => {
+      for (final album
+          in ref.watch(savedAlbumsProvider).valueOrNull ?? const <Album>[])
+        album.id,
+    },
+    CollectionType.artists => {
+      for (final artist
+          in ref.watch(followedArtistsProvider).valueOrNull ?? const <Artist>[])
+        artist.id,
+    },
+    CollectionType.playlists => {
+      for (final playlist
+          in ref.watch(savedPlaylistsProvider).valueOrNull ??
+              const <Playlist>[])
+        playlist.id,
+    },
+  },
+);
+
+final artistDetailsProvider = FutureProvider.autoDispose
+    .family<ArtistDetails, String>((ref, id) {
+      ref.watch(userIdProvider);
+      return ref.watch(linerApiProvider).getArtist(id);
+    });
+
+final albumProvider = FutureProvider.autoDispose.family<Album, String>((
+  ref,
+  id,
+) {
+  ref.watch(userIdProvider);
+  return ref.watch(linerApiProvider).getAlbum(id);
+});
+
+final catalogPlaylistProvider = FutureProvider.autoDispose
+    .family<Playlist, String>((ref, id) {
+      ref.watch(userIdProvider);
+      return ref.watch(linerApiProvider).getCatalogPlaylist(id);
+    });
+
+final userPlaylistProvider = FutureProvider.autoDispose
+    .family<UserPlaylistDetails, String>((ref, id) {
+      ref.watch(userIdProvider);
+      return ref.watch(linerApiProvider).getUserPlaylist(id);
+    });
 
 final likedTracksProvider =
     StateNotifierProvider<LikedTracksNotifier, LikedTracksState>((ref) {

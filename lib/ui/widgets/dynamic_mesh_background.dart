@@ -29,7 +29,8 @@ class _DynamicMeshBackgroundState extends State<DynamicMeshBackground>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 12),
-    )..repeat(reverse: true);
+    );
+    if (widget.isPlaying) _controller.repeat(reverse: true);
   }
 
   @override

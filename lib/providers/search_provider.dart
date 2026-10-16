@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api/api_client.dart';
 import '../core/api/liner_api.dart';
+import '../core/models/album.dart';
 import '../core/models/artist.dart';
 import '../core/models/playlist.dart';
 import '../core/models/track.dart';
@@ -21,6 +22,7 @@ class SearchState {
     this.hasError = false,
     this.tracks = const [],
     this.artists = const [],
+    this.albums = const [],
     this.playlists = const [],
   });
 
@@ -29,10 +31,14 @@ class SearchState {
   final bool hasError;
   final List<Track> tracks;
   final List<Artist> artists;
+  final List<Album> albums;
   final List<Playlist> playlists;
 
   bool get hasResults =>
-      tracks.isNotEmpty || artists.isNotEmpty || playlists.isNotEmpty;
+      tracks.isNotEmpty ||
+      artists.isNotEmpty ||
+      albums.isNotEmpty ||
+      playlists.isNotEmpty;
 }
 
 class SearchNotifier extends StateNotifier<SearchState> {
@@ -65,6 +71,7 @@ class SearchNotifier extends StateNotifier<SearchState> {
         query: state.query,
         tracks: results.tracks,
         artists: results.artists,
+        albums: results.albums,
         playlists: results.playlists,
       );
     } on ApiException catch (error) {

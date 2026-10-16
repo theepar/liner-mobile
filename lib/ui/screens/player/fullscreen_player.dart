@@ -6,13 +6,29 @@ import '../../../core/models/track.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../providers/player_provider.dart';
+import '../../../providers/settings_provider.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/dynamic_mesh_background.dart';
 import '../../widgets/like_button.dart';
+import 'add_to_playlist_sheet.dart';
 import 'lyrics_view.dart';
 import 'queue_sheet.dart';
 import 'speed_pitch_sheet.dart';
 import 'track_options_sheet.dart';
+
+/// Slides the now-playing screen up over whatever is showing.
+PageRouteBuilder<void> fullscreenPlayerRoute() => PageRouteBuilder<void>(
+  pageBuilder: (_, _, _) => const FullscreenPlayer(),
+  transitionsBuilder: (_, animation, _, child) => SlideTransition(
+    position: animation.drive(
+      Tween(
+        begin: const Offset(0, 1),
+        end: Offset.zero,
+      ).chain(CurveTween(curve: Curves.easeOutCubic)),
+    ),
+    child: child,
+  ),
+);
 
 class FullscreenPlayer extends ConsumerWidget {
   const FullscreenPlayer({super.key});
@@ -32,6 +48,9 @@ class FullscreenPlayer extends ConsumerWidget {
           speed: s.playbackSpeed,
         ),
       ),
+    );
+    final animateBackground = ref.watch(
+      settingsProvider.select((s) => s.animatedBackground),
     );
     final notifier = ref.read(playerStateProvider.notifier);
     final track = view.track;
@@ -58,7 +77,7 @@ class FullscreenPlayer extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       body: DynamicMeshBackground(
-        isPlaying: view.isPlaying,
+        isPlaying: view.isPlaying && animateBackground,
         child: SafeArea(
           child: Column(
             children: [
@@ -252,7 +271,11 @@ class _TopBar extends StatelessWidget {
               color: Colors.white,
               size: 26,
             ),
-            onPressed: () => showTrackOptionsSheet(context, track),
+            onPressed: () => showTrackOptionsSheet(
+              context,
+              track,
+              beforeNavigate: () => Navigator.of(context).pop(),
+            ),
           ),
         ],
       ),
@@ -342,6 +365,16 @@ class _TrackInfo extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          IconButton(
+            tooltip: 'Add to playlist',
+            splashRadius: 24,
+            icon: const Icon(
+              Icons.playlist_add_rounded,
+              color: Colors.white60,
+              size: 26,
+            ),
+            onPressed: () => showAddToPlaylistSheet(context, track),
           ),
           LikeButton(track: track, size: 26, inactiveColor: Colors.white60),
         ],

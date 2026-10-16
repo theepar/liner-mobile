@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/auth_validation.dart';
 import '../../../providers/auth_provider.dart';
 import '../../widgets/liner_logo.dart';
 
@@ -14,28 +16,39 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
+  static final _usernameFormatters = <TextInputFormatter>[
+    FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9_]')),
+    LengthLimitingTextInputFormatter(AuthValidation.maxUsernameLength),
+    TextInputFormatter.withFunction(
+      (oldValue, newValue) =>
+          newValue.copyWith(text: newValue.text.toLowerCase()),
+    ),
+  ];
+
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _confirmPassword = TextEditingController();
   final _username = TextEditingController();
   final _displayName = TextEditingController();
 
   bool _isRegister = false;
   bool _isBusy = false;
-  bool _obscurePassword = true;
+  bool _obscurePasswords = true;
   String? _error;
 
   @override
   void dispose() {
     _email.dispose();
     _password.dispose();
+    _confirmPassword.dispose();
     _username.dispose();
     _displayName.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (_isBusy || !(_formKey.currentState?.validate() ?? false)) return;
     setState(() {
       _isBusy = true;
       _error = null;
@@ -45,13 +58,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       if (_isRegister) {
         await auth.register(
-          email: _email.text.trim(),
+          email: _email.text,
           password: _password.text,
           username: _username.text,
           displayName: _displayName.text,
         );
       } else {
-        await auth.signIn(_email.text.trim(), _password.text);
+        await auth.signIn(_email.text, _password.text);
       }
     } on AuthException catch (error) {
       if (!mounted) return;
@@ -66,16 +79,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() {
       _isRegister = !_isRegister;
       _error = null;
+      _confirmPassword.clear();
     });
-  }
-
-  String? _required(String? value) =>
-      value == null || value.trim().isEmpty ? 'Required' : null;
-
-  String? _validateEmail(String? value) {
-    final email = value?.trim() ?? '';
-    if (email.isEmpty) return 'Required';
-    return email.contains('@') ? null : 'Enter a valid email';
   }
 
   @override
@@ -90,6 +95,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               constraints: const BoxConstraints(maxWidth: 420),
               child: Form(
                 key: _formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 child: AutofillGroup(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -126,14 +132,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         _field(
                           controller: _displayName,
                           label: 'Display name',
-                          validator: _required,
+                          validator: AuthValidation.displayName,
+                          textCapitalization: TextCapitalization.words,
                           autofillHints: const [AutofillHints.name],
                         ),
                         const SizedBox(height: 14),
                         _field(
                           controller: _username,
                           label: 'Username',
-                          validator: _required,
+                          helper: '3-30 letters, numbers or underscores',
+                          validator: AuthValidation.username,
+                          inputFormatters: _usernameFormatters,
                           autofillHints: const [AutofillHints.newUsername],
                         ),
                         const SizedBox(height: 14),
@@ -141,7 +150,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       _field(
                         controller: _email,
                         label: 'Email',
-                        validator: _validateEmail,
+                        validator: AuthValidation.email,
                         keyboardType: TextInputType.emailAddress,
                         autofillHints: const [AutofillHints.email],
                       ),
@@ -149,31 +158,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       _field(
                         controller: _password,
                         label: 'Password',
-                        validator: _required,
-                        obscureText: _obscurePassword,
+                        helper: _isRegister ? 'At least 8 characters' : null,
+                        validator: AuthValidation.password,
+                        obscureText: _obscurePasswords,
                         autofillHints: [
                           _isRegister
                               ? AutofillHints.newPassword
                               : AutofillHints.password,
                         ],
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: _submit,
-                        suffix: IconButton(
-                          tooltip: _obscurePassword
-                              ? 'Show password'
-                              : 'Hide password',
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_rounded
-                                : Icons.visibility_off_rounded,
-                            color: Colors.white54,
-                            size: 20,
-                          ),
-                          onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
-                        ),
+                        textInputAction: _isRegister
+                            ? TextInputAction.next
+                            : TextInputAction.done,
+                        onSubmitted: _isRegister ? null : _submit,
+                        suffix: _visibilityToggle(),
                       ),
+                      if (_isRegister) ...[
+                        const SizedBox(height: 14),
+                        _field(
+                          controller: _confirmPassword,
+                          label: 'Confirm password',
+                          validator: (value) => AuthValidation.confirmPassword(
+                            _password.text,
+                            value,
+                          ),
+                          obscureText: _obscurePasswords,
+                          autofillHints: const [AutofillHints.newPassword],
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: _submit,
+                          suffix: _visibilityToggle(),
+                        ),
+                      ],
                       const SizedBox(height: 24),
                       SizedBox(
                         height: 50,
@@ -228,45 +242,65 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
+  Widget _visibilityToggle() => IconButton(
+    tooltip: _obscurePasswords ? 'Show passwords' : 'Hide passwords',
+    icon: Icon(
+      _obscurePasswords
+          ? Icons.visibility_rounded
+          : Icons.visibility_off_rounded,
+      color: Colors.white54,
+      size: 20,
+    ),
+    onPressed: () => setState(() => _obscurePasswords = !_obscurePasswords),
+  );
+
   Widget _field({
     required TextEditingController controller,
     required String label,
     required String? Function(String?) validator,
+    String? helper,
     TextInputType? keyboardType,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+    List<TextInputFormatter>? inputFormatters,
     Iterable<String>? autofillHints,
     bool obscureText = false,
     TextInputAction textInputAction = TextInputAction.next,
     VoidCallback? onSubmitted,
     Widget? suffix,
   }) {
+    OutlineInputBorder border(Color color) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: color),
+    );
+
     return TextFormField(
       controller: controller,
       validator: validator,
       keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
+      inputFormatters: inputFormatters,
       autofillHints: autofillHints,
       obscureText: obscureText,
+      autocorrect: false,
+      enableSuggestions:
+          !obscureText && keyboardType != TextInputType.emailAddress,
       enabled: !_isBusy,
       textInputAction: textInputAction,
       onFieldSubmitted: onSubmitted == null ? null : (_) => onSubmitted(),
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
+        helperText: helper,
+        helperStyle: const TextStyle(color: Colors.white38),
         labelStyle: const TextStyle(color: Colors.white60),
         suffixIcon: suffix,
         filled: true,
         fillColor: LinerColors.darkElevated,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: LinerColors.darkBorderSecondary),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: LinerColors.darkBorderSecondary),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: LinerColors.accentPrimary),
-        ),
+        border: border(LinerColors.darkBorderSecondary),
+        enabledBorder: border(LinerColors.darkBorderSecondary),
+        focusedBorder: border(LinerColors.accentPrimary),
+        errorBorder: border(Colors.redAccent),
+        focusedErrorBorder: border(Colors.redAccent),
       ),
     );
   }

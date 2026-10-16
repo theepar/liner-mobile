@@ -1,8 +1,16 @@
 abstract final class AppConfig {
   static const primaryApiUrl = 'https://api.tryliner.fun';
   static const fallbackApiUrl = 'http://edge.tryliner.fun:10518';
+  static const importWorkerUrl = 'wss://import.tryliner.fun/v1/ws';
   static const shareBaseUrl = 'https://link.tryliner.fun';
   static const deepLinkScheme = 'liner';
+
+  static const channelUrl = 'https://t.me/liner_app';
+  static const supportUrl = 'https://t.me/liner_app?direct';
+  static const githubUrl = 'https://github.com/tryliner/desktop';
+  static const websiteUrl = 'https://tryliner.fun';
+  static const docsUrl =
+      'https://github.com/tryliner/desktop/blob/main/README.md';
 
   /// Must match the `version` in pubspec.yaml (enforced by a unit test).
   static const clientVersion = '1.0.4';

@@ -90,7 +90,7 @@ Future<void> _signIn(WidgetTester tester) async {
   );
   await tester.enterText(
     find.widgetWithText(TextFormField, 'Password'),
-    'secret',
+    'password123',
   );
   await tester.tap(find.widgetWithText(ElevatedButton, 'Sign in'));
   await tester.pumpAndSettle();
@@ -156,6 +156,8 @@ void main() {
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sign Out'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Sign out'));
     await tester.pumpAndSettle();
 
     expect(find.text('Sign in to Liner'), findsOneWidget);

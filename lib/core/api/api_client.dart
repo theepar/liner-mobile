@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:io' show HttpDate, HttpException;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -8,8 +9,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
+import '../models/connection_report.dart';
 import '../models/json_helpers.dart';
 import '../models/liner_user.dart';
+import '../utils/auth_validation.dart';
+import '../utils/uuid.dart';
+import 'request_signer.dart';
 
 const _apiUrlPrefKey = 'liner_api_url';
 const _sessionStorageKey = 'liner_session';
@@ -28,13 +33,20 @@ class AuthException implements Exception {
 }
 
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode});
+  const ApiException(
+    this.message, {
+    this.statusCode,
+    this.code,
+    this.requestId,
+  });
 
   factory ApiException.fromDio(DioException error) {
     final body = asMap(error.response?.data);
     return ApiException(
       asString(body?['message']) ?? error.message ?? 'Request failed',
       statusCode: error.response?.statusCode,
+      code: asString(body?['code']),
+      requestId: error.response?.headers.value('x-request-id'),
     );
   }
 
@@ -43,10 +55,17 @@ class ApiException implements Exception {
   /// Null when the server could not be reached at all.
   final int? statusCode;
 
+  /// Machine-readable error code from the API body, such as `USERNAME_TAKEN`.
+  final String? code;
+
+  final String? requestId;
+
   bool get isNetworkFailure => statusCode == null;
 
   @override
-  String toString() => 'ApiException($statusCode): $message';
+  String toString() =>
+      'ApiException($statusCode${code == null ? '' : ' $code'}): $message'
+      '${requestId == null ? '' : ' [reqId: $requestId]'}';
 }
 
 class _Session {
@@ -90,7 +109,11 @@ class _Session {
 class ApiClient {
   ApiClient._(this._dio, this._storage) {
     _dio.interceptors.add(
-      InterceptorsWrapper(onRequest: _onRequest, onError: _onError),
+      InterceptorsWrapper(
+        onRequest: _onRequest,
+        onResponse: _onResponse,
+        onError: _onError,
+      ),
     );
   }
 
@@ -113,6 +136,10 @@ class ApiClient {
   _Session? _session;
   LinerUser? _currentUser;
   Future<bool>? _refreshing;
+  int _serverClockOffsetMs = 0;
+
+  /// Signs outgoing requests when the API gateway requires it.
+  RequestSigner? signer;
 
   String get baseUrl => _baseUrl;
   bool get isUsingFallback => _baseUrl == AppConfig.fallbackApiUrl;
@@ -179,6 +206,38 @@ class ApiClient {
     return _baseUrl;
   }
 
+  /// Pings the active server's open `/health` endpoint, without signing in,
+  /// failing over or retrying, so the result describes this server alone.
+  Future<ConnectionReport> checkConnection() async {
+    final probe = Dio(
+      BaseOptions(
+        connectTimeout: AppConfig.probeTimeout,
+        receiveTimeout: AppConfig.probeTimeout,
+        validateStatus: (_) => true,
+      ),
+    )..httpClientAdapter = _dio.httpClientAdapter;
+    final clock = Stopwatch()..start();
+    try {
+      final res = await probe.get<Object?>('$_baseUrl/health');
+      return ConnectionReport(
+        baseUrl: _baseUrl,
+        statusCode: res.statusCode,
+        latency: clock.elapsed,
+      );
+    } on DioException catch (error) {
+      return ConnectionReport(
+        baseUrl: _baseUrl,
+        failure: switch (error.type) {
+          DioExceptionType.connectionTimeout ||
+          DioExceptionType.receiveTimeout ||
+          DioExceptionType.sendTimeout => 'Timed out',
+          DioExceptionType.connectionError => 'Could not connect',
+          _ => 'Request failed',
+        },
+      );
+    }
+  }
+
   void _applyBaseUrl(String url) {
     _baseUrl = url;
     _dio.options.baseUrl = url;
@@ -195,7 +254,7 @@ class ApiClient {
 
   Future<LinerUser> login(String email, String password) => _authenticate(
     '${_authPathPrefix}login',
-    {'email': email, 'password': password},
+    {'email': AuthValidation.normalizeEmail(email), 'password': password},
   );
 
   Future<LinerUser> register({
@@ -204,9 +263,9 @@ class ApiClient {
     required String username,
     required String displayName,
   }) => _authenticate('${_authPathPrefix}register', {
-    'email': email,
+    'email': AuthValidation.normalizeEmail(email),
     'password': password,
-    'username': username.trim().toLowerCase(),
+    'username': AuthValidation.normalizeUsername(username),
     'displayName': displayName.trim(),
   });
 
@@ -232,6 +291,9 @@ class ApiClient {
 
   Future<Object?> post(String path, {Object? body}) =>
       _send('POST', path, body: body);
+
+  Future<Object?> patch(String path, {Object? body}) =>
+      _send('PATCH', path, body: body);
 
   Future<Object?> put(String path) => _send('PUT', path);
 
@@ -317,32 +379,137 @@ class ApiClient {
     }
   }
 
-  static String _authMessage(DioException error) =>
-      switch (error.response?.statusCode) {
-        null => 'Cannot reach the server. Check your connection.',
-        401 || 403 => 'Incorrect email or password.',
-        409 => 'That email or username is already taken.',
-        400 || 422 => 'Please check the details you entered.',
+  /// Maps the API's error `code` first; the HTTP status only decides when the
+  /// body carries no code (a bare 401 comes from the gateway, not from a
+  /// wrong password).
+  static String _authMessage(DioException error) {
+    final status = error.response?.statusCode;
+    if (status == null) {
+      return 'Cannot reach the server. Check your connection.';
+    }
+
+    final code = asString(asMap(error.response?.data)?['code']);
+    return switch (code) {
+      'INVALID_CREDENTIALS' => 'Email or password is incorrect.',
+      'EMAIL_ALREADY_USED' => 'This email is already in use.',
+      'USERNAME_TAKEN' =>
+        'This username is already taken. Please choose another.',
+      'INVALID_USERNAME' =>
+        'Username must be 3-30 lowercase characters (a-z, 0-9, _).',
+      'INVALID_INPUT' => 'Please check the details you entered.',
+      _ => switch (status) {
         429 => 'Too many attempts. Try again in a moment.',
-        _ => 'Something went wrong. Please try again.',
-      };
+        >= 500 => 'The server is having problems. Try again later.',
+        401 || 403 =>
+          'The Liner server rejected this app (HTTP $status). The API only '
+              'accepts requests signed by an authorized client.'
+              '${_requestIdSuffix(error)}',
+        _ => 'Something went wrong (HTTP $status). Please try again.',
+      },
+    };
+  }
+
+  static String _requestIdSuffix(DioException error) {
+    final id = error.response?.headers.value('x-request-id');
+    return id == null ? '' : ' [reqId: $id]';
+  }
 
   Future<void> _onRequest(
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    options.headers['x-request-id'] ??= newUuid();
+    _attachUserHeaders(options);
+
     if (!options.path.startsWith(_authPathPrefix)) {
       if (_session?.expiresSoon ?? false) await _refreshSession();
       final token = _session?.accessToken;
       if (token != null) options.headers['Authorization'] = 'Bearer $token';
     }
+    await _sign(options);
     handler.next(options);
   }
+
+  void _attachUserHeaders(RequestOptions options) {
+    final user = _currentUser;
+    if (user == null) return;
+    options.headers['x-user-id'] ??= user.id;
+    final username = user.username;
+    if (username != null && username.isNotEmpty) {
+      options.headers['x-user-name'] ??= username;
+    }
+  }
+
+  /// The signature covers the exact body string, so the body is encoded here
+  /// and sent as that same string.
+  Future<void> _sign(RequestOptions options) async {
+    final signer = this.signer;
+    if (signer == null) return;
+
+    final data = options.data;
+    final String? body;
+    if (data == null) {
+      body = null;
+    } else if (data is String) {
+      body = data;
+    } else {
+      body = jsonEncode(data);
+      options
+        ..data = body
+        ..contentType = Headers.jsonContentType;
+    }
+
+    try {
+      options.headers.addAll(
+        await signer.sign(
+          method: options.method.toUpperCase(),
+          path: options.path.split('?').first.trim(),
+          timestamp: _serverTimestampSeconds(),
+          body: body,
+        ),
+      );
+    } on Exception catch (error) {
+      _log('sign', error);
+    }
+  }
+
+  void _onResponse(
+    Response<Object?> response,
+    ResponseInterceptorHandler handler,
+  ) {
+    _syncClock(response.headers);
+    handler.next(response);
+  }
+
+  /// Keeps signatures valid when the device clock drifts from the server's.
+  void _syncClock(Headers? headers) {
+    final seconds = int.tryParse(headers?.value('x-liner-server-time') ?? '');
+    final dateHeader = headers?.value('date');
+    DateTime? serverTime;
+    if (seconds != null) {
+      serverTime = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+    } else if (dateHeader != null) {
+      try {
+        serverTime = HttpDate.parse(dateHeader);
+      } on HttpException {
+        serverTime = null;
+      }
+    }
+    if (serverTime != null) {
+      _serverClockOffsetMs =
+          serverTime.millisecondsSinceEpoch -
+          DateTime.now().millisecondsSinceEpoch;
+    }
+  }
+
+  int _serverTimestampSeconds() =>
+      (DateTime.now().millisecondsSinceEpoch + _serverClockOffsetMs) ~/ 1000;
 
   Future<void> _onError(
     DioException error,
     ErrorInterceptorHandler handler,
   ) async {
+    _syncClock(error.response?.headers);
     final options = error.requestOptions;
     try {
       final isAuthPath = options.path.startsWith(_authPathPrefix);

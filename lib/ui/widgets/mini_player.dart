@@ -30,7 +30,7 @@ class MiniPlayer extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: GestureDetector(
-        onTap: () => Navigator.of(context).push(_fullscreenRoute()),
+        onTap: () => Navigator.of(context).push(fullscreenPlayerRoute()),
         child: Container(
           height: 60,
           decoration: BoxDecoration(
@@ -148,19 +148,6 @@ class MiniPlayer extends ConsumerWidget {
       ),
     );
   }
-
-  static PageRouteBuilder<void> _fullscreenRoute() => PageRouteBuilder<void>(
-    pageBuilder: (_, _, _) => const FullscreenPlayer(),
-    transitionsBuilder: (_, animation, _, child) => SlideTransition(
-      position: animation.drive(
-        Tween(
-          begin: const Offset(0, 1),
-          end: Offset.zero,
-        ).chain(CurveTween(curve: Curves.easeOutCubic)),
-      ),
-      child: child,
-    ),
-  );
 }
 
 class _Progress extends ConsumerWidget {

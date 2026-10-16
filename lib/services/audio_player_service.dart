@@ -3,78 +3,114 @@ import 'dart:developer' as developer;
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
-import 'package:just_audio/just_audio.dart';
 
 import '../core/api/liner_api.dart';
-import '../core/models/lyric.dart';
+import '../core/models/playback_event.dart';
 import '../core/models/player_state.dart';
 import '../core/models/track.dart';
+import '../core/utils/uuid.dart';
+import 'audio_engine.dart';
+import 'lyrics_offset_store.dart';
+import 'lyrics_session.dart';
+import 'playback_telemetry.dart';
 
 class AudioPlayerService {
-  AudioPlayerService(this._api, {AudioPlayer? player})
-    : _player = player ?? AudioPlayer() {
+  AudioPlayerService(
+    this._api, {
+    AudioEngine? engine,
+    DateTime Function() clock = DateTime.now,
+    LyricsOffsetStore offsets = const PrefsLyricsOffsetStore(),
+  }) : _engine = engine ?? JustAudioEngine(),
+       _clock = clock,
+       _offsets = offsets {
     _subscriptions.addAll([
-      _player.positionStream.listen(
+      _engine.positionStream.listen(
         (position) => _emit(_currentState.copyWith(position: position)),
       ),
-      _player.durationStream.listen((duration) {
+      _engine.durationStream.listen((duration) {
         if (duration != null) {
           _emit(_currentState.copyWith(duration: duration));
         }
       }),
-      _player.playerStateStream.listen(_onPlayerState),
+      _engine.stateStream.listen(_onEngineState),
     ]);
   }
 
   final LinerApi _api;
-  final AudioPlayer _player;
+  final AudioEngine _engine;
+  final DateTime Function() _clock;
+  final LyricsOffsetStore _offsets;
+  LyricsSession? _lyricsSession;
   final _random = Random();
   final _queue = <Track>[];
   final _subscriptions = <StreamSubscription<Object?>>[];
   final _stateController = StreamController<PlayerStateData>.broadcast();
+  late final _telemetry = PlaybackTelemetry(onEvent: _report, clock: _clock);
 
   PlayerStateData _currentState = const PlayerStateData();
+  PlaybackContext? _context;
   int _currentIndex = 0;
   int _playRequestId = 0;
+  String _waveId = newUuid();
+  bool _isFetchingRadio = false;
+
+  /// When on, similar tracks are appended as the queue runs out.
+  bool autoplaySimilar = true;
 
   Stream<PlayerStateData> get stateStream => _stateController.stream;
   PlayerStateData get currentState => _currentState;
 
-  /// AVPlayer cannot decode WebM/Opus, so iOS asks the server for AAC.
-  static String? get _preferredCodec =>
-      defaultTargetPlatform == TargetPlatform.iOS ? 'aac' : null;
+  /// Asks the server for AAC instead of its default codec.
+  bool highQuality = false;
+
+  /// AVPlayer cannot decode WebM/Opus, so iOS always asks the server for AAC.
+  String? get _preferredCodec =>
+      highQuality || defaultTargetPlatform == TargetPlatform.iOS ? 'aac' : null;
 
   void _emit(PlayerStateData state) {
     _currentState = state;
-    _stateController.add(state);
+    if (!_stateController.isClosed) _stateController.add(state);
   }
 
-  void _onPlayerState(PlayerState playerState) {
-    final processingState = playerState.processingState;
+  void _onEngineState(EngineState engineState) {
+    final processing = engineState.processing;
     final current = _currentState.status;
 
-    if (processingState == ProcessingState.idle &&
+    if (processing == EngineProcessing.idle &&
         (current == PlaybackStatus.loading ||
             current == PlaybackStatus.error)) {
       return;
     }
 
-    final status = switch (processingState) {
-      ProcessingState.loading ||
-      ProcessingState.buffering => PlaybackStatus.loading,
-      ProcessingState.completed => PlaybackStatus.completed,
-      _ => playerState.playing ? PlaybackStatus.playing : PlaybackStatus.paused,
+    final status = switch (processing) {
+      EngineProcessing.loading ||
+      EngineProcessing.buffering => PlaybackStatus.loading,
+      EngineProcessing.completed => PlaybackStatus.completed,
+      _ =>
+        engineState.isPlaying ? PlaybackStatus.playing : PlaybackStatus.paused,
     };
     final justCompleted =
         status == PlaybackStatus.completed &&
         current != PlaybackStatus.completed;
 
+    if (status == PlaybackStatus.playing) {
+      _telemetry.onPlaying();
+    } else {
+      _telemetry.onPausedOrStopped();
+    }
+
     _emit(_currentState.copyWith(status: status));
     if (justCompleted) _onTrackCompleted();
   }
 
-  Future<void> setQueue(List<Track> tracks, {int startIndex = 0}) async {
+  Future<void> setQueue(
+    List<Track> tracks, {
+    int startIndex = 0,
+    PlaybackContext? context,
+  }) async {
     if (tracks.isEmpty) return;
+    _context = context;
+    _waveId = newUuid();
     _queue
       ..clear()
       ..addAll(tracks);
@@ -85,31 +121,46 @@ class AudioPlayerService {
         currentIndex: _currentIndex,
       ),
     );
-    await playTrack(_queue[_currentIndex]);
+    await _play(_queue[_currentIndex]);
   }
 
-  Future<void> playTrack(Track track) async {
+  Future<void> playTrack(Track track, {PlaybackContext? context}) {
+    _context = context;
+    _waveId = newUuid();
+    return _play(track);
+  }
+
+  Future<void> skipTo(int index) async {
+    if (index < 0 || index >= _queue.length) return;
+    _currentIndex = index;
+    _emit(_currentState.copyWith(currentIndex: index));
+    await _play(_queue[index]);
+  }
+
+  Future<void> _play(Track track) async {
     final requestId = ++_playRequestId;
+    _telemetry.startTrack(track, _context);
     _emit(
       _currentState.copyWith(
         currentTrack: track,
         status: PlaybackStatus.loading,
         position: Duration.zero,
         duration: Duration(milliseconds: track.durationMs),
-        lyrics: const <LyricLine>[],
+        clearLyrics: true,
         isLoadingLyrics: true,
       ),
     );
     unawaited(_loadLyrics(track, requestId));
+    _maybeTopUpRadio(track, requestId);
 
     try {
-      await _player.stop();
+      await _engine.stop();
       final streamUrl = await _api.getStreamUrl(
         track.id,
         preferredCodec: _preferredCodec,
       );
       if (requestId != _playRequestId) return;
-      await _player.setUrl(streamUrl);
+      await _engine.setUrl(streamUrl);
       if (requestId != _playRequestId) return;
       unawaited(_startPlayback(requestId));
     } on Exception catch (error) {
@@ -119,11 +170,11 @@ class AudioPlayerService {
     }
   }
 
-  /// `AudioPlayer.play` completes only when playback pauses or ends, so it
+  /// `AudioEngine.play` completes only when playback pauses or ends, so it
   /// must never be awaited by callers.
   Future<void> _startPlayback(int requestId) async {
     try {
-      await _player.play();
+      await _engine.play();
     } on Exception catch (error) {
       if (requestId != _playRequestId) return;
       developer.log('play failed: $error', name: 'Player');
@@ -132,47 +183,185 @@ class AudioPlayerService {
   }
 
   Future<void> _loadLyrics(Track track, int requestId) async {
-    var lyrics = const <LyricLine>[];
+    final session = LyricsSession(durationMs: track.durationMs);
+    _lyricsSession = session;
+    unawaited(_restoreLyricsOffset(track.id, session, requestId));
+
     try {
-      lyrics = await _api.getLyrics(track.id, durationMs: track.durationMs);
+      await for (final candidate in _api.streamLyrics(track.id)) {
+        if (requestId != _playRequestId) return;
+        if (session.add(candidate)) _emitLyrics(session);
+      }
     } on Exception catch (error) {
       developer.log('lyrics(${track.id}) failed: $error', name: 'Player');
     }
     if (requestId != _playRequestId) return;
-    _emit(_currentState.copyWith(lyrics: lyrics, isLoadingLyrics: false));
+    _emitLyrics(session, isLoading: false);
+  }
+
+  Future<void> _restoreLyricsOffset(
+    String trackId,
+    LyricsSession session,
+    int requestId,
+  ) async {
+    final saved = await _offsets.read(trackId);
+    if (saved == 0 || requestId != _playRequestId) return;
+    session.setOffset(saved);
+    _emitLyrics(session);
+  }
+
+  void _emitLyrics(LyricsSession session, {bool? isLoading}) {
+    _emit(
+      _currentState.withLyrics(
+        lines: session.lines,
+        options: session.options,
+        activeProvider: session.activeProvider,
+        offsetMs: session.offsetMs,
+        plainText: session.plainText,
+        isLoading: isLoading,
+      ),
+    );
+  }
+
+  /// Switches to another provider's lyrics for the current track.
+  void selectLyricsProvider(String provider) {
+    final session = _lyricsSession;
+    if (session == null || !session.select(provider)) return;
+    _emitLyrics(session);
+  }
+
+  /// Shifts the lyrics timing for the current track and remembers it; positive
+  /// values show the lyrics later.
+  Future<void> setLyricsOffset(int offsetMs) async {
+    final session = _lyricsSession;
+    final track = _currentState.currentTrack;
+    if (session == null || track == null) return;
+    session.setOffset(offsetMs);
+    _emitLyrics(session);
+    await _offsets.write(track.id, session.offsetMs);
+  }
+
+  void _report(PlaybackEvent event) {
+    unawaited(_sendEvent(event));
+  }
+
+  Future<void> _sendEvent(PlaybackEvent event) async {
+    try {
+      await _api.recordPlaybackEvent(event);
+    } on Exception catch (error) {
+      developer.log('playback event failed: $error', name: 'Player');
+    }
+  }
+
+  /// Queues [track] after the current one, or at the end.
+  void addToQueue(Track track, {bool next = false}) {
+    if (_currentState.currentTrack == null) {
+      unawaited(playTrack(track));
+      return;
+    }
+    _ensureQueueHoldsCurrentTrack();
+    _queue.insert(next ? _currentIndex + 1 : _queue.length, track);
+    _emitQueue();
+  }
+
+  /// Starts a station seeded with [seed]; similar tracks follow it.
+  Future<void> startRadio(Track seed) =>
+      setQueue([seed], context: PlaybackContext('radio', seed.id));
+
+  /// A track played on its own has no queue yet; give it one so tracks can be
+  /// inserted around it.
+  void _ensureQueueHoldsCurrentTrack() {
+    final current = _currentState.currentTrack;
+    if (_queue.isEmpty && current != null) {
+      _queue.add(current);
+      _currentIndex = 0;
+    }
+  }
+
+  void _emitQueue() {
+    _emit(
+      _currentState.copyWith(
+        queue: List.unmodifiable(_queue),
+        currentIndex: _currentIndex,
+      ),
+    );
+  }
+
+  void _maybeTopUpRadio(Track seed, int requestId) {
+    if (!autoplaySimilar ||
+        _isFetchingRadio ||
+        _currentState.repeatMode != LinerRepeatMode.off) {
+      return;
+    }
+    final upcoming = _queue.isEmpty ? 0 : _queue.length - 1 - _currentIndex;
+    if (upcoming >= 2) return;
+    _isFetchingRadio = true;
+    unawaited(_topUpRadio(seed, requestId));
+  }
+
+  Future<void> _topUpRadio(Track seed, int requestId) async {
+    try {
+      _ensureQueueHoldsCurrentTrack();
+      final recent = _queue.length > 20
+          ? _queue.sublist(_queue.length - 20)
+          : _queue;
+      final similar = await _api.getRadio(
+        seed.id,
+        history: [for (final track in recent) track.id],
+        waveId: _waveId,
+      );
+      if (requestId != _playRequestId) return;
+
+      final known = {for (final track in _queue) track.id};
+      final additions = [
+        for (final track in similar)
+          if (known.add(track.id)) track,
+      ];
+      if (additions.isEmpty) return;
+      _queue.addAll(additions);
+      _emitQueue();
+    } on Exception catch (error) {
+      developer.log('radio failed: $error', name: 'Player');
+    } finally {
+      _isFetchingRadio = false;
+    }
   }
 
   Future<void> play() async {
     final track = _currentState.currentTrack;
     if (track == null) {
-      if (_queue.isNotEmpty) await playTrack(_queue[_currentIndex]);
+      if (_queue.isNotEmpty) await _play(_queue[_currentIndex]);
     } else if (_currentState.hasError) {
-      await playTrack(track);
+      await _play(track);
     } else {
-      unawaited(_player.play());
+      unawaited(_engine.play());
     }
   }
 
   Future<void> stop() async {
     _playRequestId++;
+    _telemetry.flush();
+    _context = null;
+    _lyricsSession = null;
     _queue.clear();
     _currentIndex = 0;
-    await _player.stop();
+    await _engine.stop();
     _emit(const PlayerStateData());
   }
 
-  Future<void> pause() => _player.pause();
+  Future<void> pause() => _engine.pause();
 
-  Future<void> togglePlayPause() => _player.playing ? pause() : play();
+  Future<void> togglePlayPause() => _engine.isPlaying ? pause() : play();
 
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) {
+    if (position < _currentState.position) _telemetry.onSeekBackward();
+    return _engine.seek(position);
+  }
 
   Future<void> next() async {
     final target = _nextIndex();
     if (target == null) return;
-    _currentIndex = target;
-    _emit(_currentState.copyWith(currentIndex: target));
-    await playTrack(_queue[target]);
+    await skipTo(target);
   }
 
   int? _nextIndex() {
@@ -191,9 +380,7 @@ class AudioPlayerService {
       await seek(Duration.zero);
       return;
     }
-    _currentIndex = _currentIndex > 0 ? _currentIndex - 1 : _queue.length - 1;
-    _emit(_currentState.copyWith(currentIndex: _currentIndex));
-    await playTrack(_queue[_currentIndex]);
+    await skipTo(_currentIndex > 0 ? _currentIndex - 1 : _queue.length - 1);
   }
 
   void toggleShuffle() {
@@ -210,12 +397,12 @@ class AudioPlayerService {
   }
 
   Future<void> setSpeed(double speed) async {
-    await _player.setSpeed(speed);
+    await _engine.setSpeed(speed);
     _emit(_currentState.copyWith(playbackSpeed: speed));
   }
 
   Future<void> setPitch(double pitch) async {
-    await _player.setPitch(pitch);
+    await _engine.setPitch(pitch);
     _emit(_currentState.copyWith(pitch: pitch));
   }
 
@@ -224,18 +411,23 @@ class AudioPlayerService {
   }
 
   void _onTrackCompleted() {
-    if (_currentState.repeatMode == LinerRepeatMode.one) {
-      unawaited(seek(Duration.zero).then((_) => play()));
+    final repeatOne = _currentState.repeatMode == LinerRepeatMode.one;
+    _telemetry.onCompleted(repeatOne: repeatOne);
+    if (repeatOne) {
+      unawaited(_engine.seek(Duration.zero).then((_) => play()));
+    } else if (_nextIndex() == null) {
+      _telemetry.flush();
     } else {
       unawaited(next());
     }
   }
 
   Future<void> dispose() async {
+    _telemetry.flush();
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }
-    await _player.dispose();
+    await _engine.dispose();
     await _stateController.close();
   }
 }

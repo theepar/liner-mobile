@@ -1,28 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/api/api_client.dart';
-import '../../../core/models/artist.dart';
-import '../../../core/models/playlist.dart';
+import '../../../core/models/playback_event.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../providers/api_provider.dart';
 import '../../../providers/library_provider.dart';
 import '../../../providers/player_provider.dart';
+import '../../navigation/navigation_helpers.dart';
 import '../../utils/ui_helpers.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/song_tile.dart';
 import '../../widgets/status_views.dart';
+import 'create_playlist_sheet.dart';
+import 'import_likes_dialog.dart';
+import 'import_progress_card.dart';
 
 enum _LibraryTab {
   all('All'),
   liked('Liked Songs'),
   playlists('Playlists'),
+  albums('Albums'),
   artists('Artists');
 
   const _LibraryTab(this.label);
 
   final String label;
 }
+
+enum _AddMenu { newPlaylist, importPlaylist, importLikes }
 
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
@@ -36,35 +40,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   bool _shows(_LibraryTab tab) => _tab == _LibraryTab.all || _tab == tab;
 
-  Future<void> _createPlaylist() async {
-    final title = await showDialog<String>(
-      context: context,
-      builder: (_) => const _CreatePlaylistDialog(),
-    );
-    if (title == null || !mounted) return;
-    try {
-      await ref.read(linerApiProvider).createPlaylist(title);
-      ref.invalidate(userPlaylistsProvider);
-    } on ApiException {
-      if (mounted) showMessage(context, 'Could not create the playlist.');
-    }
-  }
-
-  Future<void> _playPlaylist(Playlist playlist) async {
-    try {
-      final tracks = await ref
-          .read(linerApiProvider)
-          .getPlaylistTracks(playlist.id);
-      if (!mounted) return;
-      if (tracks.isEmpty) {
-        showMessage(context, 'This playlist is empty.');
-        return;
-      }
-      await ref.read(playerStateProvider.notifier).playAll(tracks);
-    } on ApiException {
-      if (mounted) showMessage(context, 'Could not load the playlist.');
-    }
-  }
+  Future<void> _onAddSelected(_AddMenu choice) => switch (choice) {
+    _AddMenu.newPlaylist => showCreatePlaylistSheet(context),
+    _AddMenu.importPlaylist => showCreatePlaylistSheet(
+      context,
+      tab: CreatePlaylistTab.import,
+    ),
+    _AddMenu.importLikes => showImportLikesDialog(context),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +60,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -90,14 +73,38 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       color: Colors.white,
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'New playlist',
+                  PopupMenuButton<_AddMenu>(
+                    tooltip: 'Add to library',
+                    color: LinerColors.darkElevated,
                     icon: const Icon(
                       Icons.add_rounded,
                       color: Colors.white,
                       size: 28,
                     ),
-                    onPressed: _createPlaylist,
+                    onSelected: _onAddSelected,
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: _AddMenu.newPlaylist,
+                        child: Text(
+                          'New playlist',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: _AddMenu.importPlaylist,
+                        child: Text(
+                          'Import a playlist',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: _AddMenu.importLikes,
+                        child: Text(
+                          'Import SoundCloud likes',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -125,16 +132,25 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                 children: [
+                  const ImportProgressCard(),
                   if (_shows(_LibraryTab.liked))
                     _LikedHero(
                       count: liked.ids.length,
                       onPlay: () => ref
                           .read(playerStateProvider.notifier)
-                          .playAll(liked.tracks),
+                          .playAll(
+                            liked.tracks,
+                            context: PlaybackContext.library,
+                          ),
                     ),
                   if (_shows(_LibraryTab.playlists)) ...[
                     const _ListTitle('Playlists'),
-                    _PlaylistsSection(onPlay: _playPlaylist),
+                    const _PlaylistsSection(),
+                    const SizedBox(height: 16),
+                  ],
+                  if (_shows(_LibraryTab.albums)) ...[
+                    const _ListTitle('Albums'),
+                    const _AlbumsSection(),
                     const SizedBox(height: 16),
                   ],
                   if (_shows(_LibraryTab.artists)) ...[
@@ -301,35 +317,88 @@ class _LikedHero extends StatelessWidget {
 }
 
 class _PlaylistsSection extends ConsumerWidget {
-  const _PlaylistsSection({required this.onPlay});
-
-  final ValueChanged<Playlist> onPlay;
+  const _PlaylistsSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final own = ref.watch(userPlaylistsProvider);
+    final saved = ref.watch(savedPlaylistsProvider);
+    final navigator = Navigator.of(context);
+
+    if (own.isLoading && saved.isLoading) return const LoadingView();
+    if (own.hasError && saved.hasError) {
+      return ErrorRetry(
+        message: "Couldn't load your playlists.",
+        onRetry: () => ref
+          ..invalidate(userPlaylistsProvider)
+          ..invalidate(savedPlaylistsProvider),
+      );
+    }
+
+    final ownPlaylists = own.valueOrNull ?? const [];
+    final savedPlaylists = saved.valueOrNull ?? const [];
+    if (ownPlaylists.isEmpty && savedPlaylists.isEmpty) {
+      return const EmptyView(
+        icon: Icons.queue_music_rounded,
+        message: 'No playlists yet. Tap + to create or import one.',
+      );
+    }
+
+    return Column(
+      children: [
+        for (final playlist in ownPlaylists)
+          _LibraryTile(
+            title: playlist.title,
+            subtitle: playlist.description ?? 'Playlist',
+            imageUrl: playlist.coverUrl,
+            onTap: () => openUserPlaylist(navigator, playlist.id),
+          ),
+        for (final playlist in savedPlaylists)
+          _LibraryTile(
+            title: playlist.title,
+            subtitle: playlist.author == null
+                ? 'Saved playlist'
+                : 'Playlist • ${playlist.author}',
+            imageUrl: playlist.coverUrl,
+            onTap: () => openCatalogPlaylist(navigator, playlist.id),
+          ),
+      ],
+    );
+  }
+}
+
+class _AlbumsSection extends ConsumerWidget {
+  const _AlbumsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final navigator = Navigator.of(context);
     return ref
-        .watch(userPlaylistsProvider)
+        .watch(savedAlbumsProvider)
         .when(
           loading: () => const LoadingView(),
           error: (_, _) => ErrorRetry(
-            message: "Couldn't load your playlists.",
-            onRetry: () => ref.invalidate(userPlaylistsProvider),
+            message: "Couldn't load your albums.",
+            onRetry: () => ref.invalidate(savedAlbumsProvider),
           ),
-          data: (playlists) {
-            if (playlists.isEmpty) {
+          data: (albums) {
+            if (albums.isEmpty) {
               return const EmptyView(
-                icon: Icons.queue_music_rounded,
-                message: 'No playlists yet. Tap + to create one.',
+                icon: Icons.album_outlined,
+                message: 'Albums you save will show up here.',
               );
             }
             return Column(
               children: [
-                for (final playlist in playlists)
+                for (final album in albums)
                   _LibraryTile(
-                    title: playlist.title,
-                    subtitle: playlist.description ?? 'Playlist',
-                    imageUrl: playlist.coverUrl,
-                    onTap: () => onPlay(playlist),
+                    title: album.title,
+                    subtitle: [
+                      if (album.artistName.isNotEmpty) album.artistName,
+                      if (album.year != null) '${album.year}',
+                    ].join(' • '),
+                    imageUrl: album.coverUrl,
+                    onTap: () => openAlbum(navigator, album.id),
                   ),
               ],
             );
@@ -343,6 +412,7 @@ class _ArtistsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final navigator = Navigator.of(context);
     return ref
         .watch(followedArtistsProvider)
         .when(
@@ -351,7 +421,7 @@ class _ArtistsSection extends ConsumerWidget {
             message: "Couldn't load your followed artists.",
             onRetry: () => ref.invalidate(followedArtistsProvider),
           ),
-          data: (List<Artist> artists) {
+          data: (artists) {
             if (artists.isEmpty) {
               return const EmptyView(
                 icon: Icons.person_outline_rounded,
@@ -366,6 +436,7 @@ class _ArtistsSection extends ConsumerWidget {
                     subtitle: 'Artist',
                     imageUrl: artist.avatarUrl,
                     isCircular: true,
+                    onTap: () => openArtist(navigator, artist.id),
                   ),
               ],
             );
@@ -394,13 +465,19 @@ class _LikedTracksList extends ConsumerWidget {
         message: 'Songs you like will show up here.',
       );
     }
-    final player = ref.read(playerStateProvider.notifier);
     return Column(
       children: [
         for (final (index, track) in state.tracks.indexed)
           SongTile(
             track: track,
-            onTap: () => player.playTrack(track, state.tracks, index),
+            onTap: () => playTapped(
+              context,
+              ref,
+              track,
+              queue: state.tracks,
+              index: index,
+              playbackContext: PlaybackContext.library,
+            ),
           ),
       ],
     );
@@ -412,14 +489,14 @@ class _LibraryTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.imageUrl,
-    this.onTap,
+    required this.onTap,
     this.isCircular = false,
   });
 
   final String title;
   final String subtitle;
   final String imageUrl;
-  final VoidCallback? onTap;
+  final VoidCallback onTap;
   final bool isCircular;
 
   @override
@@ -446,69 +523,8 @@ class _LibraryTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(color: Colors.white54, fontSize: 12),
       ),
-      trailing: onTap == null
-          ? null
-          : const Icon(Icons.play_arrow_rounded, color: Colors.white38),
+      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white38),
       onTap: onTap,
-    );
-  }
-}
-
-class _CreatePlaylistDialog extends StatefulWidget {
-  const _CreatePlaylistDialog();
-
-  @override
-  State<_CreatePlaylistDialog> createState() => _CreatePlaylistDialogState();
-}
-
-class _CreatePlaylistDialogState extends State<_CreatePlaylistDialog> {
-  final _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final title = _controller.text.trim();
-    if (title.isNotEmpty) Navigator.of(context).pop(title);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: LinerColors.darkElevated,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text(
-        'New Playlist',
-        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-      ),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        textInputAction: TextInputAction.done,
-        onSubmitted: (_) => _submit(),
-        style: const TextStyle(color: Colors.white),
-        decoration: const InputDecoration(
-          hintText: 'Playlist name',
-          hintStyle: TextStyle(color: Colors.white38),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: LinerColors.accentPrimary,
-            foregroundColor: Colors.white,
-          ),
-          onPressed: _submit,
-          child: const Text('Create'),
-        ),
-      ],
     );
   }
 }

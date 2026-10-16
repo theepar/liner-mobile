@@ -19,6 +19,10 @@ class PlayerStateData {
     this.pitch = 1.0,
     this.isLyricsOpen = false,
     this.lyrics = const [],
+    this.lyricsOptions = const [],
+    this.activeLyricsProvider,
+    this.lyricsOffsetMs = 0,
+    this.lyricsPlainText,
     this.isLoadingLyrics = false,
   });
 
@@ -34,16 +38,53 @@ class PlayerStateData {
   final double pitch;
   final bool isLyricsOpen;
   final List<LyricLine> lyrics;
+  final List<LyricsOption> lyricsOptions;
+  final String? activeLyricsProvider;
+  final int lyricsOffsetMs;
+
+  /// Set instead of [lyrics] when the active provider has no timing.
+  final String? lyricsPlainText;
   final bool isLoadingLyrics;
 
   bool get isPlaying => status == PlaybackStatus.playing;
   bool get isBuffering => status == PlaybackStatus.loading;
   bool get hasError => status == PlaybackStatus.error;
+  bool get hasLyrics =>
+      lyrics.isNotEmpty || (lyricsPlainText?.isNotEmpty ?? false);
 
   double get progress {
     if (duration.inMilliseconds == 0) return 0.0;
     return (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
   }
+
+  /// Replaces every lyrics field at once, so a provider without plain text
+  /// (or without a selection) clears what the previous one left behind.
+  PlayerStateData withLyrics({
+    required List<LyricLine> lines,
+    required List<LyricsOption> options,
+    required String? activeProvider,
+    required int offsetMs,
+    required String? plainText,
+    bool? isLoading,
+  }) => PlayerStateData(
+    currentTrack: currentTrack,
+    queue: queue,
+    currentIndex: currentIndex,
+    status: status,
+    position: position,
+    duration: duration,
+    isShuffle: isShuffle,
+    repeatMode: repeatMode,
+    playbackSpeed: playbackSpeed,
+    pitch: pitch,
+    isLyricsOpen: isLyricsOpen,
+    lyrics: lines,
+    lyricsOptions: options,
+    activeLyricsProvider: activeProvider,
+    lyricsOffsetMs: offsetMs,
+    lyricsPlainText: plainText,
+    isLoadingLyrics: isLoading ?? isLoadingLyrics,
+  );
 
   PlayerStateData copyWith({
     Track? currentTrack,
@@ -58,6 +99,11 @@ class PlayerStateData {
     double? pitch,
     bool? isLyricsOpen,
     List<LyricLine>? lyrics,
+    List<LyricsOption>? lyricsOptions,
+    String? activeLyricsProvider,
+    int? lyricsOffsetMs,
+    String? lyricsPlainText,
+    bool clearLyrics = false,
     bool? isLoadingLyrics,
   }) => PlayerStateData(
     currentTrack: currentTrack ?? this.currentTrack,
@@ -71,7 +117,17 @@ class PlayerStateData {
     playbackSpeed: playbackSpeed ?? this.playbackSpeed,
     pitch: pitch ?? this.pitch,
     isLyricsOpen: isLyricsOpen ?? this.isLyricsOpen,
-    lyrics: lyrics ?? this.lyrics,
+    lyrics: clearLyrics ? const [] : (lyrics ?? this.lyrics),
+    lyricsOptions: clearLyrics
+        ? const []
+        : (lyricsOptions ?? this.lyricsOptions),
+    activeLyricsProvider: clearLyrics
+        ? null
+        : (activeLyricsProvider ?? this.activeLyricsProvider),
+    lyricsOffsetMs: clearLyrics ? 0 : (lyricsOffsetMs ?? this.lyricsOffsetMs),
+    lyricsPlainText: clearLyrics
+        ? null
+        : (lyricsPlainText ?? this.lyricsPlainText),
     isLoadingLyrics: isLoadingLyrics ?? this.isLoadingLyrics,
   );
 }

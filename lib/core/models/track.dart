@@ -59,6 +59,23 @@ class Track {
 
   String? get artistId => artists.isEmpty ? null : artists.first.id;
 
+  Track copyWith({
+    String? albumId,
+    String? albumName,
+    String? coverUrl,
+    String? coverFallbackUrl,
+  }) => Track(
+    id: id,
+    title: title,
+    artists: artists,
+    albumId: albumId ?? this.albumId,
+    albumName: albumName ?? this.albumName,
+    coverUrl: coverUrl ?? this.coverUrl,
+    coverFallbackUrl: coverFallbackUrl ?? this.coverFallbackUrl,
+    durationMs: durationMs,
+    explicit: explicit,
+  );
+
   String get shareUrl => AppConfig.shareUrl('track', id);
   String get deepLink => AppConfig.deepLink('track', id);
 

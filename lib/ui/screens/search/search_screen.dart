@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/playback_event.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../providers/player_provider.dart';
+import '../../../providers/search_history_provider.dart';
 import '../../../providers/search_provider.dart';
+import '../../navigation/navigation_helpers.dart';
+import '../../utils/ui_helpers.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/song_tile.dart';
 import '../../widgets/status_views.dart';
@@ -12,6 +15,7 @@ enum _SearchFilter {
   all('All'),
   tracks('Songs'),
   artists('Artists'),
+  albums('Albums'),
   playlists('Playlists');
 
   const _SearchFilter(this.label);
@@ -55,6 +59,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     ref.read(searchProvider.notifier).search(query);
   }
 
+  void _remember() =>
+      ref.read(searchHistoryProvider.notifier).add(_controller.text);
+
   @override
   Widget build(BuildContext context) {
     final search = ref.watch(searchProvider);
@@ -91,7 +98,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   textInputAction: TextInputAction.search,
                   style: const TextStyle(color: Colors.white, fontSize: 15),
                   decoration: InputDecoration(
-                    hintText: 'Songs, artists, or playlists...',
+                    hintText: 'Songs, artists, albums or playlists...',
                     hintStyle: TextStyle(
                       color: Colors.white.withValues(alpha: 0.4),
                       fontSize: 14,
@@ -122,6 +129,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ),
                   ),
                   onChanged: notifier.search,
+                  onSubmitted: (_) => _remember(),
                 ),
               ),
             ),
@@ -135,7 +143,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             const SizedBox(height: 8),
             Expanded(
               child: search.query.isEmpty
-                  ? _CategoriesGrid(onSelected: _runSearch)
+                  ? _Browse(onSelected: _runSearch)
                   : search.isLoading
                   ? const LoadingView()
                   : search.hasError
@@ -143,7 +151,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       message: 'Search failed.',
                       onRetry: () => notifier.search(search.query),
                     )
-                  : _Results(search: search, filter: _filter),
+                  : _Results(
+                      search: search,
+                      filter: _filter,
+                      onOpened: _remember,
+                    ),
             ),
           ],
         ),
@@ -200,16 +212,66 @@ class _FilterPills extends StatelessWidget {
   }
 }
 
-class _CategoriesGrid extends StatelessWidget {
-  const _CategoriesGrid({required this.onSelected});
+/// Shown while the query is empty: recent searches and quick topics.
+class _Browse extends ConsumerWidget {
+  const _Browse({required this.onSelected});
 
   final ValueChanged<String> onSelected;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final history = ref.watch(searchHistoryProvider);
+    final historyNotifier = ref.read(searchHistoryProvider.notifier);
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
       children: [
+        if (history.isNotEmpty) ...[
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Recent searches',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 17,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: historyNotifier.clear,
+                child: const Text(
+                  'Clear',
+                  style: TextStyle(color: LinerColors.accentSecondary),
+                ),
+              ),
+            ],
+          ),
+          for (final query in history.take(8))
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.history_rounded, color: Colors.white54),
+              title: Text(
+                query,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white),
+              ),
+              trailing: IconButton(
+                tooltip: 'Remove',
+                icon: const Icon(
+                  Icons.close_rounded,
+                  color: Colors.white38,
+                  size: 18,
+                ),
+                onPressed: () => historyNotifier.remove(query),
+              ),
+              onTap: () => onSelected(query),
+            ),
+          const SizedBox(height: 16),
+        ],
         const Text(
           'Browse Categories',
           style: TextStyle(
@@ -267,10 +329,15 @@ class _CategoriesGrid extends StatelessWidget {
 }
 
 class _Results extends ConsumerWidget {
-  const _Results({required this.search, required this.filter});
+  const _Results({
+    required this.search,
+    required this.filter,
+    required this.onOpened,
+  });
 
   final SearchState search;
   final _SearchFilter filter;
+  final VoidCallback onOpened;
 
   bool _shows(_SearchFilter section) =>
       filter == _SearchFilter.all || filter == section;
@@ -284,7 +351,7 @@ class _Results extends ConsumerWidget {
       );
     }
 
-    final player = ref.read(playerStateProvider.notifier);
+    final navigator = Navigator.of(context);
     final showHeadings = filter == _SearchFilter.all;
 
     return ListView(
@@ -301,31 +368,37 @@ class _Results extends ConsumerWidget {
               separatorBuilder: (_, _) => const SizedBox(width: 14),
               itemBuilder: (context, index) {
                 final artist = search.artists[index];
-                return SizedBox(
-                  width: 72,
-                  child: Column(
-                    children: [
-                      ClipOval(
-                        child: CoverImage(
-                          url: artist.avatarUrl,
-                          width: 60,
-                          height: 60,
-                          iconSize: 26,
+                return GestureDetector(
+                  onTap: () {
+                    onOpened();
+                    openArtist(navigator, artist.id);
+                  },
+                  child: SizedBox(
+                    width: 72,
+                    child: Column(
+                      children: [
+                        ClipOval(
+                          child: CoverImage(
+                            url: artist.avatarUrl,
+                            width: 60,
+                            height: 60,
+                            iconSize: 26,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        artist.name,
-                        maxLines: 2,
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                        const SizedBox(height: 6),
+                        Text(
+                          artist.name,
+                          maxLines: 2,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 );
               },
@@ -338,39 +411,91 @@ class _Results extends ConsumerWidget {
           for (final (index, track) in search.tracks.indexed)
             SongTile(
               track: track,
-              onTap: () => player.playTrack(track, search.tracks, index),
+              onTap: () {
+                onOpened();
+                playTapped(
+                  context,
+                  ref,
+                  track,
+                  queue: search.tracks,
+                  index: index,
+                  playbackContext: PlaybackContext.search,
+                );
+              },
+            ),
+        ],
+        if (_shows(_SearchFilter.albums) && search.albums.isNotEmpty) ...[
+          if (showHeadings) const _Heading('Albums'),
+          for (final album in search.albums)
+            _ResultTile(
+              title: album.title,
+              subtitle: [
+                if (album.artistName.isNotEmpty) album.artistName,
+                if (album.year != null) '${album.year}',
+              ].join(' • '),
+              imageUrl: album.coverUrl,
+              onTap: () {
+                onOpened();
+                openAlbum(navigator, album.id);
+              },
             ),
         ],
         if (_shows(_SearchFilter.playlists) && search.playlists.isNotEmpty) ...[
           if (showHeadings) const _Heading('Playlists'),
           for (final playlist in search.playlists)
-            ListTile(
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: CoverImage(
-                  url: playlist.coverUrl,
-                  width: 44,
-                  height: 44,
-                  iconSize: 22,
-                ),
-              ),
-              title: Text(
-                playlist.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-              subtitle: Text(
-                playlist.author ?? 'Playlist',
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
-              ),
+            _ResultTile(
+              title: playlist.title,
+              subtitle: playlist.author ?? 'Playlist',
+              imageUrl: playlist.coverUrl,
+              onTap: () {
+                onOpened();
+                openCatalogPlaylist(navigator, playlist.id);
+              },
             ),
         ],
       ],
+    );
+  }
+}
+
+class _ResultTile extends StatelessWidget {
+  const _ResultTile({
+    required this.title,
+    required this.subtitle,
+    required this.imageUrl,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final String imageUrl;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: CoverImage(url: imageUrl, width: 44, height: 44, iconSize: 22),
+      ),
+      title: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: Colors.white54, fontSize: 12),
+      ),
+      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+      onTap: onTap,
     );
   }
 }

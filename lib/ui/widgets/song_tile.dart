@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/track.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/player_provider.dart';
+import '../screens/player/track_options_sheet.dart';
 import 'cover_image.dart';
 import 'like_button.dart';
+import 'track_action.dart';
 
 class SongTile extends ConsumerWidget {
   const SongTile({
@@ -13,11 +15,15 @@ class SongTile extends ConsumerWidget {
     required this.track,
     required this.onTap,
     this.rank,
+    this.extraActions = const [],
   });
 
   final Track track;
   final int? rank;
   final VoidCallback onTap;
+
+  /// Extra entries for this tile's options menu.
+  final List<TrackAction> extraActions;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -119,6 +125,20 @@ class SongTile extends ConsumerWidget {
               ),
             ),
             LikeButton(track: track),
+            IconButton(
+              tooltip: 'More options',
+              splashRadius: 20,
+              icon: const Icon(
+                Icons.more_vert_rounded,
+                color: LinerColors.darkTextTertiary,
+                size: 20,
+              ),
+              onPressed: () => showTrackOptionsSheet(
+                context,
+                track,
+                extraActions: extraActions,
+              ),
+            ),
           ],
         ),
       ),

@@ -4,7 +4,7 @@ Mobile client for [Liner](https://github.com/tryliner): music streaming with
 syllable-synced lyrics and a reactive dark UI. It talks to the same API as the
 official [desktop app](https://github.com/tryliner/desktop).
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.35%2B-02569B?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
+[![Flutter](https://img.shields.io/badge/Flutter-3.44%2B-02569B?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
 [![State](https://img.shields.io/badge/State-Riverpod_2-purple?style=flat-square)](https://riverpod.dev)
 
 ## Features
@@ -50,7 +50,7 @@ test/                            # Unit, API (fake HTTP adapter) and widget test
 
 ## Getting started
 
-Requires Flutter 3.35 or newer.
+Requires Flutter 3.44 or newer.
 
 ```bash
 flutter pub get
@@ -70,6 +70,13 @@ flutter run --dart-define=LINER_API_URL=https://your-instance.example
 ```
 
 A custom URL disables automatic probing and failover.
+
+The production gateway only accepts requests carrying the `x-liner-signature`,
+`x-liner-timestamp` and `x-liner-nonce` headers, which the desktop app generates
+with its closed-source signer. This repository does not include a signer: provide
+an authorized `RequestSigner` (see `lib/core/api/request_signer.dart`) and install
+it with `ApiClient.instance.signer` in `main()`. Until then, sign-in fails with
+"The Liner server rejected this app".
 
 ### Launcher icons
 

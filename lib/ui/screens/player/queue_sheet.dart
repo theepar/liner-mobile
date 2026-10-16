@@ -89,7 +89,7 @@ class _QueueSheet extends ConsumerWidget {
                         )
                       : null,
                   onTap: () {
-                    notifier.playTrack(track, queue, index);
+                    notifier.skipTo(index);
                     Navigator.of(context).pop();
                   },
                 );

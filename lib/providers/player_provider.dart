@@ -2,14 +2,26 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/models/playback_event.dart';
 import '../core/models/player_state.dart';
 import '../core/models/track.dart';
 import '../services/audio_player_service.dart';
 import 'api_provider.dart';
 import 'auth_provider.dart';
+import 'settings_provider.dart';
 
 final playerServiceProvider = Provider<AudioPlayerService>((ref) {
   final service = AudioPlayerService(ref.watch(linerApiProvider));
+  ref.listen<bool>(
+    settingsProvider.select((settings) => settings.autoplaySimilar),
+    (_, enabled) => service.autoplaySimilar = enabled,
+    fireImmediately: true,
+  );
+  ref.listen<bool>(
+    settingsProvider.select((settings) => settings.highQualityAudio),
+    (_, enabled) => service.highQuality = enabled,
+    fireImmediately: true,
+  );
   ref.listen<String?>(userIdProvider, (_, userId) {
     if (userId == null) unawaited(service.stop());
   });
@@ -35,15 +47,31 @@ class PlayerNotifier extends StateNotifier<PlayerStateData> {
   final AudioPlayerService _service;
   late final StreamSubscription<PlayerStateData> _subscription;
 
-  Future<void> playTrack(Track track, [List<Track>? queue, int? index]) {
-    if (queue == null || queue.isEmpty) return _service.playTrack(track);
+  Future<void> playTrack(
+    Track track, [
+    List<Track>? queue,
+    int? index,
+    PlaybackContext? context,
+  ]) {
+    if (queue == null || queue.isEmpty) {
+      return _service.playTrack(track, context: context);
+    }
     final start = index ?? queue.indexWhere((t) => t.id == track.id);
-    if (start < 0) return _service.playTrack(track);
-    return _service.setQueue(queue, startIndex: start);
+    if (start < 0) return _service.playTrack(track, context: context);
+    return _service.setQueue(queue, startIndex: start, context: context);
   }
 
-  Future<void> playAll(List<Track> tracks) =>
-      tracks.isEmpty ? Future.value() : _service.setQueue(tracks);
+  Future<void> playAll(List<Track> tracks, {PlaybackContext? context}) =>
+      tracks.isEmpty
+      ? Future.value()
+      : _service.setQueue(tracks, context: context);
+
+  Future<void> skipTo(int index) => _service.skipTo(index);
+
+  void addToQueue(Track track, {bool next = false}) =>
+      _service.addToQueue(track, next: next);
+
+  Future<void> startRadio(Track seed) => _service.startRadio(seed);
 
   Future<void> togglePlayPause() => _service.togglePlayPause();
   Future<void> next() => _service.next();
@@ -54,6 +82,10 @@ class PlayerNotifier extends StateNotifier<PlayerStateData> {
   void toggleShuffle() => _service.toggleShuffle();
   void cycleRepeatMode() => _service.cycleRepeatMode();
   void toggleLyrics() => _service.toggleLyrics();
+  void selectLyricsProvider(String provider) =>
+      _service.selectLyricsProvider(provider);
+  Future<void> setLyricsOffset(int offsetMs) =>
+      _service.setLyricsOffset(offsetMs);
 
   @override
   void dispose() {

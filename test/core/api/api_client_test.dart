@@ -3,6 +3,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:liner_mobile/core/api/api_client.dart';
 import 'package:liner_mobile/core/api/liner_api.dart';
+import 'package:liner_mobile/core/api/request_signer.dart';
+import 'package:liner_mobile/core/models/lyric.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../support/fake_api.dart';
@@ -36,8 +38,8 @@ void main() {
       expectAuthorization(adapter.requests.last, 'Bearer access-1');
     });
 
-    test('maps auth failures to user-facing messages', () async {
-      Future<AuthException> failWith(int? status) async {
+    test('maps the API error code to a user-facing message', () async {
+      Future<AuthException> failWith(int? status, {String? code}) async {
         final client = clientWith(
           FakeAdapter((options) {
             if (status == null) {
@@ -46,7 +48,10 @@ void main() {
                 reason: 'offline',
               );
             }
-            return jsonResponse({'message': 'internal detail'}, status: status);
+            return jsonResponse({
+              'message': 'internal detail',
+              'code': ?code,
+            }, status: status);
           }),
         );
         try {
@@ -57,12 +62,124 @@ void main() {
         fail('expected AuthException');
       }
 
-      expect((await failWith(401)).message, 'Incorrect email or password.');
       expect(
-        (await failWith(409)).message,
-        'That email or username is already taken.',
+        (await failWith(401, code: 'INVALID_CREDENTIALS')).message,
+        'Email or password is incorrect.',
       );
-      expect((await failWith(500)).message, isNot(contains('internal detail')));
+      expect(
+        (await failWith(409, code: 'EMAIL_ALREADY_USED')).message,
+        'This email is already in use.',
+      );
+      expect(
+        (await failWith(409, code: 'USERNAME_TAKEN')).message,
+        'This username is already taken. Please choose another.',
+      );
+      expect(
+        (await failWith(400, code: 'INVALID_USERNAME')).message,
+        contains('3-30'),
+      );
+      expect(
+        (await failWith(400, code: 'INVALID_INPUT')).message,
+        'Please check the details you entered.',
+      );
+      expect(
+        (await failWith(500)).message,
+        'The server is having problems. Try again later.',
+      );
+      expect(
+        (await failWith(null)).message,
+        'Cannot reach the server. Check your connection.',
+      );
+    });
+
+    test(
+      'a bare 401 is reported as a rejected client, not a bad password',
+      () async {
+        final client = clientWith(
+          FakeAdapter((_) => jsonResponse({}, status: 401)),
+        );
+
+        final error = await client
+            .register(
+              email: 'me@example.com',
+              password: 'password123',
+              username: 'me',
+              displayName: 'Me',
+            )
+            .then<AuthException?>((_) => null)
+            .onError<AuthException>((error, _) => error);
+
+        expect(error!.message, contains('rejected this app'));
+        expect(error.message, isNot(contains('password')));
+      },
+    );
+
+    test('normalizes and sends exactly the registration fields', () async {
+      final adapter = FakeAdapter((_) => jsonResponse(authPayload()));
+      final client = clientWith(adapter);
+
+      await client.register(
+        email: '  Me@Example.COM ',
+        password: 'password123',
+        username: ' MyName_1 ',
+        displayName: '  My Name  ',
+      );
+
+      expect(adapter.requests.single.path, '/v1/auth/register');
+      expect(adapter.requests.single.data, {
+        'email': 'me@example.com',
+        'password': 'password123',
+        'username': 'myname_1',
+        'displayName': 'My Name',
+      });
+    });
+
+    test('every request carries a request id and client metadata', () async {
+      final adapter = FakeAdapter((_) => jsonResponse({'items': <Object?>[]}));
+      final client = clientWith(adapter);
+
+      await client.get('/v1/me/playlists');
+      await client.get('/v1/me/playlists');
+
+      final ids = adapter.requests
+          .map((r) => r.headers['x-request-id'])
+          .toSet();
+      expect(ids, hasLength(2));
+      expect(
+        ids.first,
+        matches(
+          RegExp(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          ),
+        ),
+      );
+    });
+
+    test('a signer receives the exact body and server-adjusted time', () async {
+      final signer = _RecordingSigner();
+      final adapter = FakeAdapter(
+        (options) => ResponseBody.fromString(
+          '{}',
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+            'x-liner-server-time': ['4102444800'],
+          },
+        ),
+      );
+      final client = clientWith(adapter)..signer = signer;
+
+      await client.get('/v1/explore/popular');
+      await client.post('/v1/me/playlists', body: {'title': 'Mix'});
+
+      final post = signer.calls.last;
+      expect(post.method, 'POST');
+      expect(post.path, '/v1/me/playlists');
+      expect(post.body, '{"title":"Mix"}');
+      expect(adapter.requests.last.data, '{"title":"Mix"}');
+      expect(adapter.requests.last.headers['x-liner-signature'], 'sig');
+      expect(post.timestamp, greaterThanOrEqualTo(4102444800));
+      expect(signer.calls.first.body, isNull);
     });
 
     test(
@@ -138,6 +255,66 @@ void main() {
       expect(adapter.requests.last.baseUrl, 'http://edge.tryliner.fun:10518');
       expect(client.baseUrl, 'http://edge.tryliner.fun:10518');
       expect(client.isUsingFallback, isTrue);
+    });
+  });
+
+  group('checkConnection', () {
+    ApiClient clientAnswering(FakeAdapter adapter) =>
+        ApiClient.withDio(Dio()..httpClientAdapter = adapter);
+
+    test('reports the status and latency of the active server', () async {
+      final adapter = FakeAdapter((_) => jsonResponse({'status': 'ok'}));
+
+      final report = await clientAnswering(adapter).checkConnection();
+
+      expect(report.isReachable, isTrue);
+      expect(report.latency, isNotNull);
+      expect(adapter.requests.single.uri.path, '/health');
+      expect(
+        adapter.requests.single.headers.containsKey('Authorization'),
+        isFalse,
+      );
+    });
+
+    test('a server error is not reachable but has no failure reason', () async {
+      final adapter = FakeAdapter((_) => jsonResponse({}, status: 503));
+
+      final report = await clientAnswering(adapter).checkConnection();
+
+      expect(report.isReachable, isFalse);
+      expect(report.statusCode, 503);
+      expect(report.failure, isNull);
+    });
+
+    test('says why it could not connect, without switching server', () async {
+      final adapter = FakeAdapter((options) {
+        throw DioException.connectionError(
+          requestOptions: options,
+          reason: 'unreachable',
+        );
+      });
+      final client = clientAnswering(adapter);
+      final before = client.baseUrl;
+
+      final report = await client.checkConnection();
+
+      expect(report.isReachable, isFalse);
+      expect(report.failure, 'Could not connect');
+      expect(client.baseUrl, before);
+      expect(adapter.requests, hasLength(1));
+    });
+
+    test('a timeout is reported as such', () async {
+      final adapter = FakeAdapter((options) {
+        throw DioException.connectionTimeout(
+          timeout: const Duration(seconds: 4),
+          requestOptions: options,
+        );
+      });
+
+      final report = await clientAnswering(adapter).checkConnection();
+
+      expect(report.failure, 'Timed out');
     });
   });
 
@@ -251,65 +428,48 @@ void main() {
     });
   });
 
-  group('LinerApi.getLyrics', () {
-    Map<String, Object?> provider(
-      String name,
-      String format,
-      String content,
-      String syncLevel,
-      num quality,
-    ) => {
-      'type': 'provider',
-      'provider': name,
-      'status': 'found',
-      'syncLevel': syncLevel,
-      'candidate': {
-        'provider': name,
-        'lyrics': {'format': format, 'content': content},
-        'syncLevel': syncLevel,
-        'quality': {'total': quality},
-      },
-    };
+  group('LinerApi.streamLyrics', () {
+    final provider = lyricsProviderEvent;
 
-    test('prefers the most granular supported candidate', () async {
+    test('yields every provider that found lyrics, in arrival order', () async {
       final adapter = FakeAdapter(
         (_) => sseResponse([
           {'type': 'metadata'},
           provider('a', 'lrc', '[00:01.00]line sync', 'line_level', 90),
           provider('b', 'ttml', '<tt/>', 'syllable_level', 99),
           provider('c', 'plain', 'no timing', 'plain', 100),
-          provider(
-            'd',
-            'richsync',
-            '[{"ts":1.0,"te":3.0,"l":[{"c":"word","o":0.0}]}]',
-            'word_level',
-            50,
-          ),
           {'type': 'done', 'cached': false},
         ]),
       );
 
-      final lyrics = await LinerApi(clientWith(adapter)).getLyrics('t1');
+      final candidates = await LinerApi(
+        clientWith(adapter),
+      ).streamLyrics('t1').toList();
 
-      expect(lyrics.single.text, 'word');
+      expect(candidates.map((c) => c.provider), ['a', 'b', 'c']);
+      expect(candidates[1].syncLevel, LyricsSyncLevel.syllable);
+      expect(candidates[1].format, 'ttml');
+      expect(candidates[0].quality, 90);
       expect(adapter.requests.single.headers['Accept'], 'text/event-stream');
     });
 
-    test('breaks ties on quality', () async {
+    test('stops reading at the done event', () async {
       final adapter = FakeAdapter(
         (_) => sseResponse([
-          provider('a', 'lrc', '[00:01.00]worse', 'line_level', 10),
-          provider('b', 'lrc', '[00:01.00]better', 'line_level', 80),
+          provider('a', 'lrc', '[00:01.00]first', 'line_level', 10),
           {'type': 'done', 'cached': true},
+          provider('late', 'lrc', '[00:01.00]ignored', 'line_level', 99),
         ]),
       );
 
-      final lyrics = await LinerApi(clientWith(adapter)).getLyrics('t1');
+      final candidates = await LinerApi(
+        clientWith(adapter),
+      ).streamLyrics('t1').toList();
 
-      expect(lyrics.single.text, 'better');
+      expect(candidates.map((c) => c.provider), ['a']);
     });
 
-    test('returns no lyrics when nothing usable was found', () async {
+    test('yields nothing when no provider found lyrics', () async {
       final adapter = FakeAdapter(
         (_) => sseResponse([
           {'type': 'provider', 'provider': 'a', 'status': 'not_found'},
@@ -317,7 +477,38 @@ void main() {
         ]),
       );
 
-      expect(await LinerApi(clientWith(adapter)).getLyrics('t1'), isEmpty);
+      expect(
+        await LinerApi(clientWith(adapter)).streamLyrics('t1').toList(),
+        isEmpty,
+      );
     });
   });
+}
+
+class _SignCall {
+  _SignCall(this.method, this.path, this.timestamp, this.body);
+
+  final String method;
+  final String path;
+  final int timestamp;
+  final String? body;
+}
+
+class _RecordingSigner implements RequestSigner {
+  final calls = <_SignCall>[];
+
+  @override
+  Future<Map<String, String>> sign({
+    required String method,
+    required String path,
+    required int timestamp,
+    String? body,
+  }) async {
+    calls.add(_SignCall(method, path, timestamp, body));
+    return {
+      'x-liner-signature': 'sig',
+      'x-liner-timestamp': '$timestamp',
+      'x-liner-nonce': 'nonce',
+    };
+  }
 }

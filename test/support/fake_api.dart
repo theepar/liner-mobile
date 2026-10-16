@@ -50,6 +50,25 @@ ResponseBody sseResponse(List<Object> events) => ResponseBody(
   },
 );
 
+/// A `provider` event of the lyrics stream whose status is `found`.
+Map<String, Object?> lyricsProviderEvent(
+  String provider,
+  String format,
+  String content,
+  String syncLevel,
+  num quality,
+) => {
+  'type': 'provider',
+  'provider': provider,
+  'status': 'found',
+  'candidate': {
+    'provider': provider,
+    'lyrics': {'format': format, 'content': content},
+    'syncLevel': syncLevel,
+    'quality': {'total': quality},
+  },
+};
+
 ApiClient clientWith(FakeAdapter adapter) {
   final dio = Dio(BaseOptions(baseUrl: 'https://api.test'))
     ..httpClientAdapter = adapter;

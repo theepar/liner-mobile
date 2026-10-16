@@ -1,22 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-/// The official Liner mark (`assets/branding/logo.svg`, from tryliner/desktop).
-class LinerLogo extends StatelessWidget {
-  const LinerLogo({super.key, this.size = 32, this.color = Colors.white});
+import '../../core/models/branding_variant.dart';
+import '../../providers/settings_provider.dart';
 
-  static const assetPath = 'assets/branding/logo.svg';
+/// The official Liner mark in the branding variant the user picked, or
+/// [variant] when previewing one.
+class LinerLogo extends ConsumerWidget {
+  const LinerLogo({super.key, this.size = 32, this.variant});
 
   final double size;
-  final Color color;
+  final BrandingVariant? variant;
 
   @override
-  Widget build(BuildContext context) => SvgPicture.asset(
-    assetPath,
-    height: size,
-    colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-    semanticsLabel: 'Liner',
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(settingsProvider.select((s) => s.branding));
+    return SvgPicture.asset(
+      (variant ?? selected).assetPath,
+      height: size,
+      semanticsLabel: 'Liner',
+    );
+  }
 }
 
 class LinerLogoTile extends StatelessWidget {

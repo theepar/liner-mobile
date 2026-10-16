@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/playback_event.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../providers/music_provider.dart';
 import '../../../providers/player_provider.dart';
+import '../../utils/ui_helpers.dart';
 import '../../widgets/liner_logo.dart';
 import '../../widgets/song_card.dart';
 import '../../widgets/song_tile.dart';
@@ -172,14 +174,25 @@ class _RecentlyPlayedSection extends ConsumerWidget {
                     itemCount: tracks.length,
                     itemBuilder: (context, index) {
                       final track = tracks[index];
-                      void play() => player.playTrack(track, tracks, index);
                       return SongCard(
                         title: track.title,
                         subtitle: track.artistName,
                         imageUrl: track.coverUrl,
                         fallbackImageUrl: track.coverFallbackUrl,
-                        onTap: play,
-                        onPlay: play,
+                        onTap: () => playTapped(
+                          context,
+                          ref,
+                          track,
+                          queue: tracks,
+                          index: index,
+                          playbackContext: PlaybackContext.library,
+                        ),
+                        onPlay: () => player.playTrack(
+                          track,
+                          tracks,
+                          index,
+                          PlaybackContext.library,
+                        ),
                       );
                     },
                   ),
@@ -230,7 +243,10 @@ class _DailyMixesSection extends ConsumerWidget {
                             mix.description ??
                             '${mix.trackCount ?? mix.tracks.length} tracks',
                         imageUrl: mix.coverUrl,
-                        onTap: () => player.playAll(mix.tracks),
+                        onTap: () => player.playAll(
+                          mix.tracks,
+                          context: PlaybackContext.playlist(mix.id),
+                        ),
                       );
                     },
                   ),
@@ -259,7 +275,6 @@ class _TrendingList extends ConsumerWidget {
             ),
           ),
           data: (tracks) {
-            final player = ref.read(playerStateProvider.notifier);
             return SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               sliver: SliverList.builder(
@@ -267,7 +282,14 @@ class _TrendingList extends ConsumerWidget {
                 itemBuilder: (context, index) => SongTile(
                   track: tracks[index],
                   rank: index + 1,
-                  onTap: () => player.playTrack(tracks[index], tracks, index),
+                  onTap: () => playTapped(
+                    context,
+                    ref,
+                    tracks[index],
+                    queue: tracks,
+                    index: index,
+                    playbackContext: PlaybackContext.explore,
+                  ),
                 ),
               ),
             );

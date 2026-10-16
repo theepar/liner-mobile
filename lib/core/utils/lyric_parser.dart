@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:xml/xml.dart';
+
 import '../models/json_helpers.dart';
 import '../models/lyric.dart';
 
@@ -157,21 +159,205 @@ class LyricParser {
     return result;
   }
 
-  static int findActiveLineIndex(List<LyricLine> lines, int currentMs) {
-    if (lines.isEmpty) return -1;
-    if (currentMs < lines.first.startMs) return 0;
+  /// Parses one provider's lyrics according to its declared format. Synced
+  /// formats that yield no timed lines produce an empty document rather than
+  /// text with invented timing.
+  static LyricsDocument parseCandidate(
+    LyricsCandidate candidate, {
+    int songDurationMs = 0,
+  }) {
+    final content = candidate.content;
+    final lines = switch (candidate.format) {
+      'plain' => const <LyricLine>[],
+      'ttml' => parseTtml(content),
+      'qrc' => parseQrc(content),
+      'lrc' || 'richsync' => parse(content, songDurationMs: songDurationMs),
+      _ => parse(content, songDurationMs: songDurationMs),
+    };
+    if (lines.isNotEmpty) return LyricsDocument(lines: lines);
+    if (candidate.format == 'plain' ||
+        candidate.syncLevel == LyricsSyncLevel.plain) {
+      return LyricsDocument(plainText: content.trim());
+    }
+    return const LyricsDocument();
+  }
 
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      if (currentMs >= line.startMs && currentMs < line.endMs) {
-        return i;
+  /// Moves every line and word by [offsetMs]; positive values show the lyrics
+  /// later.
+  static List<LyricLine> shift(List<LyricLine> lines, int offsetMs) {
+    if (offsetMs == 0) return lines;
+    int move(int value) => value + offsetMs < 0 ? 0 : value + offsetMs;
+    return [
+      for (final line in lines)
+        LyricLine(
+          startMs: move(line.startMs),
+          endMs: move(line.endMs),
+          text: line.text,
+          isInstrumental: line.isInstrumental,
+          words: [
+            for (final word in line.words)
+              LyricWord(
+                startMs: move(word.startMs),
+                endMs: move(word.endMs),
+                text: word.text,
+              ),
+          ],
+        ),
+    ];
+  }
+
+  /// Timed-text (TTML) lyrics: line paragraphs with optional timed spans for
+  /// words or syllables.
+  static List<LyricLine> parseTtml(String raw) {
+    final XmlDocument document;
+    try {
+      document = XmlDocument.parse(raw);
+    } on XmlException {
+      return const [];
+    }
+
+    final lines = <LyricLine>[];
+    for (final paragraph in document.findAllElements('p', namespace: '*')) {
+      final start = _ttmlTime(paragraph.getAttribute('begin'));
+      if (start == null) continue;
+
+      final words = <LyricWord>[];
+      _collectTtmlWords(paragraph, words);
+      final text = words.isEmpty
+          ? _collapseWhitespace(paragraph.innerText)
+          : words.map((word) => word.text).join().trim();
+      if (text.isEmpty) continue;
+
+      var end = _ttmlTime(paragraph.getAttribute('end'));
+      final duration = _ttmlTime(paragraph.getAttribute('dur'));
+      end ??= duration == null ? null : start + duration;
+      end ??= words.isEmpty ? start + 4000 : words.last.endMs;
+      lines.add(
+        LyricLine(startMs: start, endMs: end, text: text, words: words),
+      );
+    }
+    return lines;
+  }
+
+  static void _collectTtmlWords(XmlNode node, List<LyricWord> words) {
+    for (final child in node.children) {
+      if (child is XmlText) {
+        if (child.value.trim().isEmpty && words.isNotEmpty) {
+          final last = words.last;
+          if (!last.text.endsWith(' ')) {
+            words[words.length - 1] = LyricWord(
+              startMs: last.startMs,
+              endMs: last.endMs,
+              text: '${last.text} ',
+            );
+          }
+        }
+      } else if (child is XmlElement && child.localName == 'span') {
+        final role = child.attributes
+            .where((attribute) => attribute.name.local == 'role')
+            .map((attribute) => attribute.value)
+            .firstOrNull;
+        if (role == 'x-translation' || role == 'x-roman') continue;
+
+        final start = _ttmlTime(child.getAttribute('begin'));
+        final end = _ttmlTime(child.getAttribute('end'));
+        final hasTimedChildren = child.descendantElements.any(
+          (element) => element.getAttribute('begin') != null,
+        );
+        if (hasTimedChildren) {
+          _collectTtmlWords(child, words);
+        } else if (start != null && end != null && child.innerText.isNotEmpty) {
+          words.add(
+            LyricWord(startMs: start, endMs: end, text: child.innerText),
+          );
+        }
       }
     }
+  }
 
-    if (currentMs >= lines.last.startMs) {
-      return lines.length - 1;
+  static final _clockTime = RegExp(
+    r'^(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:[.,](\d+))?$',
+  );
+  static final _offsetTime = RegExp(r'^(\d+(?:\.\d+)?)(h|ms|m|s)?$');
+
+  static int? _ttmlTime(String? value) {
+    final text = value?.trim();
+    if (text == null || text.isEmpty) return null;
+
+    final clock = _clockTime.firstMatch(text);
+    if (clock != null) {
+      final hours = int.parse(clock.group(1) ?? '0');
+      final minutes = int.parse(clock.group(2)!);
+      final seconds = int.parse(clock.group(3)!);
+      final fraction = clock.group(4);
+      final millis = fraction == null
+          ? 0
+          : int.parse(fraction.padRight(3, '0').substring(0, 3));
+      return ((hours * 60 + minutes) * 60 + seconds) * 1000 + millis;
     }
 
+    final offset = _offsetTime.firstMatch(text);
+    if (offset == null) return null;
+    final amount = double.parse(offset.group(1)!);
+    return switch (offset.group(2)) {
+      'h' => (amount * 3600000).round(),
+      'm' => (amount * 60000).round(),
+      'ms' => amount.round(),
+      _ => (amount * 1000).round(),
+    };
+  }
+
+  static String _collapseWhitespace(String text) =>
+      text.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+  /// QRC lyrics: `[lineStartMs,lineDurationMs]word(startMs,durationMs)...`.
+  static List<LyricLine> parseQrc(String raw) {
+    var text = raw;
+    final wrapped = RegExp(r'LyricContent="([^"]*)"').firstMatch(raw);
+    if (wrapped != null) {
+      text = const XmlDefaultEntityMapping.xml().decode(wrapped.group(1)!);
+    }
+
+    final linePattern = RegExp(r'^\[(\d+),(\d+)\](.*)$');
+    final wordPattern = RegExp(r'([^()]*?)\((\d+),(\d+)\)');
+    final lines = <LyricLine>[];
+    for (final rawLine in text.split(RegExp(r'\r?\n'))) {
+      final match = linePattern.firstMatch(rawLine.trim());
+      if (match == null) continue;
+      final start = int.parse(match.group(1)!);
+      final duration = int.parse(match.group(2)!);
+      final body = match.group(3)!;
+
+      final words = [
+        for (final word in wordPattern.allMatches(body))
+          if (word.group(1)!.isNotEmpty)
+            LyricWord(
+              startMs: int.parse(word.group(2)!),
+              endMs: int.parse(word.group(2)!) + int.parse(word.group(3)!),
+              text: word.group(1)!,
+            ),
+      ];
+      final lineText = words.isEmpty
+          ? body.trim()
+          : words.map((word) => word.text).join().trim();
+      if (lineText.isEmpty) continue;
+      lines.add(
+        LyricLine(
+          startMs: start,
+          endMs: start + duration,
+          text: lineText,
+          words: words,
+        ),
+      );
+    }
+    return lines;
+  }
+
+  static int findActiveLineIndex(List<LyricLine> lines, int currentMs) {
+    if (lines.isEmpty) return -1;
+    for (var i = lines.length - 1; i >= 0; i--) {
+      if (currentMs >= lines[i].startMs) return i;
+    }
     return 0;
   }
 
