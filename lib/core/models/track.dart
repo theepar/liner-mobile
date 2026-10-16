@@ -6,6 +6,7 @@ class Track {
   final String? albumName;
   final String? albumId;
   final String coverUrl;
+  final String? coverFallbackUrl;
   final int durationMs;
   final int playCount;
   final bool hasLyrics;
@@ -20,12 +21,16 @@ class Track {
     this.albumName,
     this.albumId,
     required this.coverUrl,
+    this.coverFallbackUrl,
     this.durationMs = 0,
     this.playCount = 0,
     this.hasLyrics = true,
     this.explicit = false,
     this.streamUrl,
   });
+
+  String get shareUrl => 'https://link.tryliner.fun/track?id=$id';
+  String get deepLink => 'liner://track?id=$id';
 
   factory Track.fromJson(Map<String, dynamic> json) {
     String artist = 'Unknown Artist';
@@ -49,14 +54,19 @@ class Track {
     }
 
     String cover = '';
+    String? coverFallback;
     if (json['cover'] is Map<String, dynamic>) {
       cover = json['cover']['url']?.toString() ?? '';
+      coverFallback = json['cover']['fallbackUrl']?.toString();
     } else if (json['cover'] is String) {
       cover = json['cover'] as String;
     } else if (json['cover_url'] is String) {
       cover = json['cover_url'] as String;
     } else if (json['coverUrl'] is String) {
       cover = json['coverUrl'] as String;
+    }
+    if (json['coverFallbackUrl'] is String) {
+      coverFallback = json['coverFallbackUrl'] as String;
     }
 
     return Track(
@@ -69,6 +79,7 @@ class Track {
       coverUrl: cover.isNotEmpty
           ? cover
           : 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80',
+      coverFallbackUrl: coverFallback,
       durationMs: (json['durationMs'] ?? json['duration_ms'] as num?)?.toInt() ?? 0,
       playCount: (json['playCount'] ?? json['play_count'] as num?)?.toInt() ?? 0,
       hasLyrics: json['has_lyrics'] as bool? ?? json['hasLyrics'] as bool? ?? true,
@@ -85,6 +96,7 @@ class Track {
         'album': albumName,
         'albumId': albumId,
         'coverUrl': coverUrl,
+        'coverFallbackUrl': coverFallbackUrl,
         'durationMs': durationMs,
         'playCount': playCount,
         'hasLyrics': hasLyrics,
@@ -100,6 +112,7 @@ class Track {
     String? albumName,
     String? albumId,
     String? coverUrl,
+    String? coverFallbackUrl,
     int? durationMs,
     int? playCount,
     bool? hasLyrics,
@@ -114,6 +127,7 @@ class Track {
         albumName: albumName ?? this.albumName,
         albumId: albumId ?? this.albumId,
         coverUrl: coverUrl ?? this.coverUrl,
+        coverFallbackUrl: coverFallbackUrl ?? this.coverFallbackUrl,
         durationMs: durationMs ?? this.durationMs,
         playCount: playCount ?? this.playCount,
         hasLyrics: hasLyrics ?? this.hasLyrics,
@@ -155,6 +169,9 @@ class Playlist {
     this.tracks = const [],
   });
 
+  String get shareUrl => 'https://link.tryliner.fun/playlist?id=$id';
+  String get deepLink => 'liner://playlist?id=$id';
+
   factory Playlist.fromJson(Map<String, dynamic> json) => Playlist(
         id: json['id']?.toString() ?? '',
         name: json['name'] as String? ?? json['title'] as String? ?? 'Untitled Playlist',
@@ -184,6 +201,9 @@ class Artist {
     this.monthlyListeners = 0,
     this.description,
   });
+
+  String get shareUrl => 'https://link.tryliner.fun/artist?id=$id';
+  String get deepLink => 'liner://artist?id=$id';
 
   factory Artist.fromJson(Map<String, dynamic> json) => Artist(
         id: json['id']?.toString() ?? '',
@@ -248,4 +268,52 @@ class LyricWord {
         endMs: (json['end_ms'] ?? json['endMs'] as num?)?.toInt() ?? 0,
         text: json['text'] as String? ?? '',
       );
+}
+
+class GroupedWord {
+  final List<LyricWord> syllables;
+  final String text;
+  final int startMs;
+  final int endMs;
+
+  const GroupedWord({
+    required this.syllables,
+    required this.text,
+    required this.startMs,
+    required this.endMs,
+  });
+}
+
+class LinerUser {
+  final String id;
+  final String email;
+  final String username;
+  final String displayName;
+  final String? avatarUrl;
+
+  const LinerUser({
+    required this.id,
+    required this.email,
+    required this.username,
+    required this.displayName,
+    this.avatarUrl,
+  });
+
+  factory LinerUser.fromJson(Map<String, dynamic> json) {
+    return LinerUser(
+      id: json['id']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      username: json['username']?.toString() ?? '',
+      displayName: json['displayName']?.toString() ?? json['name']?.toString() ?? '',
+      avatarUrl: json['avatarUrl']?.toString() ?? json['avatar']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'email': email,
+        'username': username,
+        'displayName': displayName,
+        'avatarUrl': avatarUrl,
+      };
 }

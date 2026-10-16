@@ -59,12 +59,28 @@ class SongTile extends StatelessWidget {
                   height: 46,
                   color: LinerColors.darkElevated,
                 ),
-                errorWidget: (context, url, error) => Container(
-                  width: 46,
-                  height: 46,
-                  color: LinerColors.darkElevated,
-                  child: const Icon(Icons.music_note, size: 20, color: LinerColors.darkTextTertiary),
-                ),
+                errorWidget: (context, url, error) {
+                  if (track.coverFallbackUrl != null && track.coverFallbackUrl!.isNotEmpty) {
+                    return CachedNetworkImage(
+                      imageUrl: track.coverFallbackUrl!,
+                      width: 46,
+                      height: 46,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(
+                        width: 46,
+                        height: 46,
+                        color: LinerColors.darkElevated,
+                        child: const Icon(Icons.music_note, size: 20, color: LinerColors.darkTextTertiary),
+                      ),
+                    );
+                  }
+                  return Container(
+                    width: 46,
+                    height: 46,
+                    color: LinerColors.darkElevated,
+                    child: const Icon(Icons.music_note, size: 20, color: LinerColors.darkTextTertiary),
+                  );
+                },
               ),
             ),
             const SizedBox(width: 12),

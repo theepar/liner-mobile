@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:liner_mobile/core/models/track.dart';
 import 'package:liner_mobile/core/utils/lyric_parser.dart';
 
 void main() {
@@ -27,6 +28,20 @@ void main() {
       expect(LyricParser.findActiveLineIndex(parsed, 2000), 0);
       expect(LyricParser.findActiveLineIndex(parsed, 6000), 1);
       expect(LyricParser.findActiveLineIndex(parsed, 12000), 2);
+    });
+
+    test('Groups syllables into words matching tryliner reference', () {
+      final syllables = [
+        const LyricWord(startMs: 1000, endMs: 1200, text: 'Hel'),
+        const LyricWord(startMs: 1200, endMs: 1500, text: 'lo '),
+        const LyricWord(startMs: 1600, endMs: 2000, text: 'World'),
+      ];
+      final grouped = LyricParser.groupSyllablesIntoWords(syllables, 'Hello World');
+      expect(grouped.length, 2);
+      expect(grouped[0].text, 'Hello ');
+      expect(grouped[0].syllables.length, 2);
+      expect(grouped[1].text, 'World');
+      expect(grouped[1].syllables.length, 1);
     });
   });
 }

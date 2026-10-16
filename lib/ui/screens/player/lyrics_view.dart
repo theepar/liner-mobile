@@ -117,39 +117,47 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
 
   Widget _buildLyricLine(LyricLine line, bool isActive, bool isPassed, int currentMs) {
     if (line.words.isNotEmpty && isActive) {
+      final grouped = LyricParser.groupSyllablesIntoWords(line.words, line.text);
       return Wrap(
-        children: line.words.map((word) {
-          final progress = LyricParser.getWordProgress(word, currentMs);
-          final isWordDone = currentMs >= word.endMs;
+        spacing: 4,
+        runSpacing: 4,
+        children: grouped.map((group) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: group.syllables.map((syllable) {
+              final progress = LyricParser.getWordProgress(syllable, currentMs);
+              final isDone = currentMs >= syllable.endMs;
 
-          return ShaderMask(
-            shaderCallback: (bounds) {
-              if (isWordDone) {
-                return const LinearGradient(
-                  colors: [Colors.white, Colors.white],
-                ).createShader(bounds);
-              }
-              return LinearGradient(
-                stops: [0.0, progress, progress, 1.0],
-                colors: [
-                  Colors.white,
-                  Colors.white,
-                  Colors.white.withValues(alpha: 0.35),
-                  Colors.white.withValues(alpha: 0.35),
-                ],
-              ).createShader(bounds);
-            },
-            child: Text(
-              word.text,
-              style: const TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-                height: 1.35,
-                letterSpacing: -0.3,
-              ),
-            ),
+              return ShaderMask(
+                shaderCallback: (bounds) {
+                  if (isDone) {
+                    return const LinearGradient(
+                      colors: [Colors.white, Colors.white],
+                    ).createShader(bounds);
+                  }
+                  return LinearGradient(
+                    stops: [0.0, progress, progress, 1.0],
+                    colors: [
+                      Colors.white,
+                      Colors.white,
+                      Colors.white.withValues(alpha: 0.35),
+                      Colors.white.withValues(alpha: 0.35),
+                    ],
+                  ).createShader(bounds);
+                },
+                child: Text(
+                  syllable.text,
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    height: 1.35,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              );
+            }).toList(),
           );
         }).toList(),
       );

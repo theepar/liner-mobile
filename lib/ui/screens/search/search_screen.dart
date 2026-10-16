@@ -15,6 +15,7 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
+  String _selectedFilter = 'all';
 
   final List<Map<String, dynamic>> _categories = const [
     {'title': 'Pop', 'color': Color(0xFFE11D48)},
@@ -92,7 +93,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            if (searchState.query.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _buildFilterPills(),
+            ],
+            const SizedBox(height: 8),
             Expanded(
               child: searchState.isLoading
                   ? const Center(child: CircularProgressIndicator(color: LinerColors.accentPrimary))
@@ -102,6 +107,55 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFilterPills() {
+    final filters = [
+      {'id': 'all', 'label': 'All'},
+      {'id': 'track', 'label': 'Songs'},
+      {'id': 'artist', 'label': 'Artists'},
+      {'id': 'playlist', 'label': 'Playlists'},
+    ];
+
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        scrollDirection: Axis.horizontal,
+        itemCount: filters.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final f = filters[index];
+          final isSelected = _selectedFilter == f['id'];
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                _selectedFilter = f['id']!;
+              });
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.white : LinerColors.darkElevated,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected ? Colors.white : LinerColors.darkBorderSecondary,
+                ),
+              ),
+              child: Text(
+                f['label']!,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.black : Colors.white70,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -171,7 +225,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     PlayerStateData playerState,
     PlayerNotifier playerNotifier,
   ) {
-    if (searchState.tracks.isEmpty) {
+    final showTracks = _selectedFilter == 'all' || _selectedFilter == 'track';
+    final showArtists = (_selectedFilter == 'all' || _selectedFilter == 'artist') && searchState.artists.isNotEmpty;
+    final showPlaylists = (_selectedFilter == 'all' || _selectedFilter == 'playlist') && searchState.playlists.isNotEmpty;
+
+    if (searchState.tracks.isEmpty && searchState.artists.isEmpty && searchState.playlists.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -187,25 +245,104 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
     }
 
-    return ListView.builder(
+    return ListView(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 100),
-      itemCount: searchState.tracks.length,
-      itemBuilder: (context, index) {
-        final track = searchState.tracks[index];
-        final isPlaying = playerState.currentTrack?.id == track.id;
+      children: [
+        if (showArtists) ...[
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Text(
+              'Artists',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+          SizedBox(
+            height: 100,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              itemCount: searchState.artists.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 14),
+              itemBuilder: (context, i) {
+                final artist = searchState.artists[i];
+                return Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundImage: NetworkImage(artist.avatarUrl),
+                      backgroundColor: LinerColors.darkElevated,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      artist.name,
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (showTracks && searchState.tracks.isNotEmpty) ...[
+          if (_selectedFilter == 'all')
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Text(
+                'Songs',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ...searchState.tracks.asMap().entries.map((entry) {
+            final index = entry.key;
+            final track = entry.value;
+            final isPlaying = playerState.currentTrack?.id == track.id;
 
-        return SongTile(
-          track: track,
-          isPlaying: isPlaying,
-          isLiked: playerState.likedTrackIds.contains(track.id),
-          onTap: () {
-            playerNotifier.playTrack(track, searchState.tracks, index);
-          },
-          onLikeToggle: () {
-            playerNotifier.toggleLike(track.id);
-          },
-        );
-      },
+            return SongTile(
+              track: track,
+              isPlaying: isPlaying,
+              isLiked: playerState.likedTrackIds.contains(track.id),
+              onTap: () {
+                playerNotifier.playTrack(track, searchState.tracks, index);
+              },
+              onLikeToggle: () {
+                playerNotifier.toggleLike(track.id);
+              },
+            );
+          }),
+        ],
+        if (showPlaylists && searchState.playlists.isNotEmpty) ...[
+          if (_selectedFilter == 'all')
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Text(
+                'Playlists',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ...searchState.playlists.map((pl) {
+            return ListTile(
+              leading: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.network(
+                  pl.coverUrl,
+                  width: 44,
+                  height: 44,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 44,
+                    height: 44,
+                    color: LinerColors.darkElevated,
+                    child: const Icon(Icons.playlist_play_rounded, color: Colors.white54),
+                  ),
+                ),
+              ),
+              title: Text(pl.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+              subtitle: Text('${pl.trackCount} tracks', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            );
+          }),
+        ],
+      ],
     );
   }
 }

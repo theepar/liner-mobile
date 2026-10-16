@@ -188,4 +188,70 @@ class LyricParser {
     if (total <= 0) return 1.0;
     return ((currentMs - word.startMs) / total).clamp(0.0, 1.0);
   }
+
+  static List<GroupedWord> groupSyllablesIntoWords(List<LyricWord> rawWords, String lineText) {
+    if (rawWords.isEmpty) return const [];
+    final List<GroupedWord> words = [];
+    List<LyricWord> currentGroup = [];
+    int charCursor = 0;
+
+    for (int i = 0; i < rawWords.length; i++) {
+      final w = rawWords[i];
+      final trimmed = w.text.trim();
+      if (trimmed.isEmpty) {
+        if (currentGroup.isNotEmpty) {
+          words.add(_createGroupedWord(currentGroup));
+          currentGroup = [];
+        }
+        continue;
+      }
+
+      final foundIdx = lineText.isNotEmpty ? lineText.indexOf(trimmed, charCursor) : -1;
+      bool isContinuation = false;
+
+      if (currentGroup.isNotEmpty) {
+        final prevSyllable = currentGroup.last;
+        final prevEndsSpace = prevSyllable.text.endsWith(' ');
+        final currStartsSpace = w.text.startsWith(' ');
+
+        if (foundIdx >= 0) {
+          final textBetween = lineText.substring(charCursor, foundIdx);
+          final hasSpaceBetween = RegExp(r'\s').hasMatch(textBetween);
+          if (!hasSpaceBetween && !prevEndsSpace && !currStartsSpace) {
+            isContinuation = true;
+          }
+        } else if (!prevEndsSpace && !currStartsSpace) {
+          isContinuation = true;
+        }
+      }
+
+      if (foundIdx >= 0) {
+        charCursor = foundIdx + trimmed.length;
+      }
+
+      if (isContinuation) {
+        currentGroup.add(w);
+      } else {
+        if (currentGroup.isNotEmpty) {
+          words.add(_createGroupedWord(currentGroup));
+        }
+        currentGroup = [w];
+      }
+    }
+
+    if (currentGroup.isNotEmpty) {
+      words.add(_createGroupedWord(currentGroup));
+    }
+
+    return words;
+  }
+
+  static GroupedWord _createGroupedWord(List<LyricWord> syllables) {
+    return GroupedWord(
+      syllables: List.unmodifiable(syllables),
+      text: syllables.map((s) => s.text).join(),
+      startMs: syllables.first.startMs,
+      endMs: syllables.last.endMs,
+    );
+  }
 }

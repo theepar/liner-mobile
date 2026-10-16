@@ -6,6 +6,7 @@ class SongCard extends StatelessWidget {
   final String title;
   final String? subtitle;
   final String imageUrl;
+  final String? fallbackImageUrl;
   final VoidCallback onTap;
   final VoidCallback? onPlay;
   final double width;
@@ -17,6 +18,7 @@ class SongCard extends StatelessWidget {
     required this.title,
     this.subtitle,
     required this.imageUrl,
+    this.fallbackImageUrl,
     required this.onTap,
     this.onPlay,
     this.width = 140,
@@ -52,12 +54,28 @@ class SongCard extends StatelessWidget {
                         child: Icon(Icons.music_note, color: LinerColors.darkTextTertiary),
                       ),
                     ),
-                    errorWidget: (context, url, error) => Container(
-                      width: width,
-                      height: height,
-                      color: LinerColors.darkElevated,
-                      child: const Icon(Icons.music_note, color: LinerColors.darkTextTertiary),
-                    ),
+                    errorWidget: (context, url, error) {
+                      if (fallbackImageUrl != null && fallbackImageUrl!.isNotEmpty) {
+                        return CachedNetworkImage(
+                          imageUrl: fallbackImageUrl!,
+                          width: width,
+                          height: height,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => Container(
+                            width: width,
+                            height: height,
+                            color: LinerColors.darkElevated,
+                            child: const Icon(Icons.music_note, color: LinerColors.darkTextTertiary),
+                          ),
+                        );
+                      }
+                      return Container(
+                        width: width,
+                        height: height,
+                        color: LinerColors.darkElevated,
+                        child: const Icon(Icons.music_note, color: LinerColors.darkTextTertiary),
+                      );
+                    },
                   ),
                 ),
                 if (onPlay != null && !isCircular)

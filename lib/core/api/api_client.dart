@@ -17,6 +17,8 @@ class ApiClient {
   late final Dio _dio;
   String _baseUrl = primaryApiUrl;
   bool _isUsingFallback = false;
+  String? _visitorData;
+  LinerUser? _currentUser;
 
   ApiClient._() {
     _dio = Dio(BaseOptions(
@@ -37,6 +39,8 @@ class ApiClient {
 
   String get baseUrl => _baseUrl;
   bool get isUsingFallback => _isUsingFallback;
+  LinerUser? get currentUser => _currentUser;
+  bool get isAuthenticated => _currentUser != null;
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -47,6 +51,112 @@ class ApiClient {
     } else {
       await probeEndpoint();
     }
+    unawaited(initVisitorSession());
+    await loadStoredUser();
+  }
+
+  Future<void> initVisitorSession() async {
+    try {
+      final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 5)));
+      final res = await dio.get<String>(
+        'https://www.youtube.com/sw.js_data',
+        options: Options(headers: {
+          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        }),
+      );
+      if (res.data != null) {
+        final match = RegExp(r'Cgt[a-zA-Z0-9_-]{20,}={0,2}').firstMatch(res.data!);
+        if (match != null) {
+          _visitorData = match.group(0);
+          if (_visitorData != null) {
+            _dio.options.headers['x-visitor-data'] = _visitorData;
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> loadStoredUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(_tokenKey);
+    if (token != null && token.isNotEmpty) {
+      try {
+        final user = await getCurrentUser();
+        _currentUser = user;
+      } catch (_) {}
+    }
+  }
+
+  Future<LinerUser?> login(String email, String password) async {
+    final res = await _dio.post('/v1/auth/login', data: {
+      'email': email,
+      'password': password,
+    });
+    final data = res.data as Map<String, dynamic>;
+    final token = data['accessToken']?.toString() ?? data['token']?.toString();
+    if (token != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_tokenKey, token);
+      if (data['user'] is Map<String, dynamic>) {
+        _currentUser = LinerUser.fromJson(data['user'] as Map<String, dynamic>);
+      } else {
+        _currentUser = await getCurrentUser();
+      }
+      return _currentUser;
+    }
+    return null;
+  }
+
+  Future<LinerUser?> register({
+    required String email,
+    required String password,
+    required String username,
+    required String displayName,
+  }) async {
+    final res = await _dio.post('/v1/auth/register', data: {
+      'email': email,
+      'password': password,
+      'username': username.trim().toLowerCase(),
+      'displayName': displayName.trim(),
+    });
+    final data = res.data as Map<String, dynamic>;
+    final token = data['accessToken']?.toString() ?? data['token']?.toString();
+    if (token != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_tokenKey, token);
+      if (data['user'] is Map<String, dynamic>) {
+        _currentUser = LinerUser.fromJson(data['user'] as Map<String, dynamic>);
+      } else {
+        _currentUser = await getCurrentUser();
+      }
+      return _currentUser;
+    }
+    return null;
+  }
+
+  Future<LinerUser?> getCurrentUser() async {
+    try {
+      final res = await _dio.get('/v1/me');
+      if (res.data is Map<String, dynamic>) {
+        _currentUser = LinerUser.fromJson(res.data as Map<String, dynamic>);
+        return _currentUser;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> logout() async {
+    _currentUser = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+  }
+
+  static String getShareUrl({required String type, required String id}) {
+    return 'https://link.tryliner.fun/$type?id=$id';
+  }
+
+  static String getDeepLink({required String type, required String id}) {
+    return 'liner://$type?id=$id';
   }
 
   Future<void> setBaseUrl(String url) async {
@@ -101,7 +211,12 @@ class ApiClient {
 
   Future<List<Playlist>> getDailyMixes() async {
     try {
-      final res = await _dio.get('/v1/me/daily-mixes');
+      Response res;
+      try {
+        res = await _dio.get('/v1/me/recommendations/daily-mixes');
+      } catch (_) {
+        res = await _dio.get('/v1/me/daily-mixes');
+      }
       if (res.data is Map && res.data['items'] is List) {
         return (res.data['items'] as List)
             .map((e) => Playlist.fromJson(e as Map<String, dynamic>))
@@ -113,12 +228,12 @@ class ApiClient {
     return defaultMixes();
   }
 
-  Future<Map<String, dynamic>> search(String query) async {
+  Future<Map<String, dynamic>> search(String query, {String type = 'all'}) async {
     if (query.trim().isEmpty) {
       return {'tracks': <Track>[], 'artists': <Artist>[], 'playlists': <Playlist>[]};
     }
     try {
-      final res = await _dio.get('/v1/search', queryParameters: {'q': query, 'type': 'all'});
+      final res = await _dio.get('/v1/search', queryParameters: {'q': query, 'type': type});
       final data = res.data as Map<String, dynamic>;
 
       final tracks = (data['tracks']?['items'] as List<dynamic>?)
@@ -146,16 +261,20 @@ class ApiClient {
     }
   }
 
-  Future<String> getPlaybackStreamUrl(String trackId) => getStreamUrl(trackId);
+  Future<String> getPlaybackStreamUrl(String trackId, {String preferredCodec = 'opus'}) =>
+      getStreamUrl(trackId, preferredCodec: preferredCodec);
 
-  Future<String> getStreamUrl(String trackId) async {
+  Future<String> getStreamUrl(String trackId, {String preferredCodec = 'opus'}) async {
     try {
       final res = await _dio.post(
         '/v1/tracks/$trackId/playback',
-        data: {'preferredCodec': 'opus', 'transport': 'direct_innertube'},
+        data: {'preferredCodec': preferredCodec, 'transport': 'direct_innertube'},
       );
-      if (res.data is Map && res.data['url'] != null) {
-        return res.data['url'] as String;
+      if (res.data is Map) {
+        final stream = res.data['streamUrl']?.toString() ?? res.data['url']?.toString();
+        if (stream != null && stream.isNotEmpty) {
+          return stream;
+        }
       }
     } catch (_) {}
     return 'https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Kangaroo_MusiQue_-_The_Neverwritten_Role_Playing_Game.mp3';

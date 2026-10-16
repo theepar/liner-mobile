@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/app_theme.dart';
@@ -115,10 +116,22 @@ class FullscreenPlayer extends ConsumerWidget {
                                     placeholder: (context, url) => Container(
                                       color: LinerColors.darkElevated,
                                     ),
-                                    errorWidget: (context, url, error) => Container(
-                                      color: LinerColors.darkElevated,
-                                      child: const Icon(Icons.music_note, color: Colors.white30, size: 60),
-                                    ),
+                                    errorWidget: (context, url, error) {
+                                      if (track.coverFallbackUrl != null && track.coverFallbackUrl!.isNotEmpty) {
+                                        return CachedNetworkImage(
+                                          imageUrl: track.coverFallbackUrl!,
+                                          fit: BoxFit.cover,
+                                          errorWidget: (_, __, ___) => Container(
+                                            color: LinerColors.darkElevated,
+                                            child: const Icon(Icons.music_note, color: Colors.white30, size: 60),
+                                          ),
+                                        );
+                                      }
+                                      return Container(
+                                        color: LinerColors.darkElevated,
+                                        child: const Icon(Icons.music_note, color: Colors.white30, size: 60),
+                                      );
+                                    },
                                   ),
                                 ),
                               ),
@@ -523,8 +536,18 @@ class FullscreenPlayer extends ConsumerWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.share_rounded, color: Colors.white),
-                title: const Text('Share Song', style: TextStyle(color: Colors.white)),
-                onTap: () => Navigator.of(context).pop(),
+                title: const Text('Share Song Link', style: TextStyle(color: Colors.white)),
+                subtitle: Text(track.shareUrl, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Clipboard.setData(ClipboardData(text: track.shareUrl));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Copied link: ${track.shareUrl}'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
               ),
             ],
           ),
