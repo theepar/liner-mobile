@@ -1,94 +1,152 @@
+<div align="center">
+
 # Liner Mobile
 
-Mobile client for [Liner](https://github.com/tryliner): music streaming with
-syllable-synced lyrics and a reactive dark UI. It talks to the same API as the
-official [desktop app](https://github.com/tryliner/desktop).
+**A Flutter music-streaming client with synchronized lyrics, a responsive player, and a dark Liner experience.**
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.44%2B-02569B?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
-[![State](https://img.shields.io/badge/State-Riverpod_2-purple?style=flat-square)](https://riverpod.dev)
+[![Dart](https://img.shields.io/badge/Dart-3.12-0175C2?style=flat-square&logo=dart&logoColor=white)](https://dart.dev)
+[![Riverpod](https://img.shields.io/badge/State-Riverpod_2-7B61FF?style=flat-square)](https://riverpod.dev)
+[![just_audio](https://img.shields.io/badge/Audio-just__audio-1DB954?style=flat-square)](https://pub.dev/packages/just_audio)
+[![License: Source-Available](https://img.shields.io/badge/License-Source--Available-blueviolet?style=flat-square&labelColor=white)](./LICENSE)
 
-## Features
+[Overview](#overview) •
+[Architecture](#architecture) •
+[Getting Started](#getting-started) •
+[Testing](#testing) •
+[Building](#building) •
+[License](#license)
 
-- **Account required.** The app opens on a sign-in / registration page; every
-  screen uses data from the signed-in account.
-- **Home:** recently played, daily mixes and trending tracks from the live API.
-- **Search:** debounced search across songs, artists and playlists.
-- **Library:** liked songs (synced with the server), your playlists, followed
-  artists, and playlist creation.
-- **Player:** queue, shuffle, repeat, seek, playback speed and pitch, mini
-  player and fullscreen player.
-- **Synced lyrics:** streamed from the lyrics endpoint; the most granular
-  time-synced candidate (syllable, then word, then line) is used, with
-  word-by-word karaoke highlighting and tap-to-seek.
-- **Resilient networking:** automatic failover between the primary API and the
-  edge relay, bearer sessions with transparent refresh-token rotation, and
-  credentials kept in the platform secure storage.
+<br/>
 
-## Project structure
+<img src="./assets/branding/app_icon.png" alt="Liner Mobile app icon" width="160" />
 
+</div>
+
+---
+
+## Overview
+
+Liner Mobile connects to the Liner API for account data, music discovery,
+library management, streaming playback, and synchronized lyrics. It requires an
+account: signed-out users only see the login screen.
+
+### Included
+
+- Home with popular tracks, listening history, and daily mixes from the API.
+- Search for tracks, artists, albums, and playlists.
+- Synced library for liked tracks, followed artists, and user playlists.
+- Queue controls, shuffle, repeat, seek, speed, pitch, mini player, and fullscreen player.
+- Streamed lyrics with provider selection, karaoke-style word highlighting, timing offset, and tap-to-seek.
+- Refresh-token sessions, secure local storage, server-time sync, and primary-to-edge API failover.
+
+> [!WARNING]
+> The production API requires authorized gateway-signature headers on every
+> `/v1/*` request. This repository deliberately does not include or recreate
+> the desktop signer, so production sign-in remains blocked until an authorized
+> `RequestSigner` is installed before `runApp`.
+
+---
+
+## Architecture
+
+```text
+liner-mobile/
+├── lib/
+│   ├── core/
+│   │   ├── api/                 # Dio transport, API endpoints, signing hook
+│   │   ├── config/              # URLs, versions, and timeouts
+│   │   ├── models/              # Defensive API contracts and player state
+│   │   └── utils/               # Lyrics parsing, validation, formatting
+│   ├── providers/               # Riverpod auth, library, search, settings, player state
+│   ├── services/                # Audio engine, telemetry, lyrics, deep links
+│   ├── ui/
+│   │   ├── navigation/          # Auth gate and signed-in shell
+│   │   ├── screens/             # Auth, home, search, library, player, settings
+│   │   └── widgets/             # Reusable Liner UI components
+│   └── main.dart                # App startup and provider scope
+├── assets/branding/             # Liner logos and launcher-icon sources
+├── test/                        # Unit, API, provider, and widget tests
+├── android/                     # Android runner and release configuration
+├── ios/                         # iOS runner configuration
+└── pubspec.yaml                 # Flutter packages and application metadata
 ```
-lib/
-├── main.dart                    # Startup, provider scope, auth gate
-├── core/
-│   ├── api/
-│   │   ├── api_client.dart      # Dio transport: failover, sessions, refresh, SSE
-│   │   └── liner_api.dart       # Typed endpoints (explore, library, search, playback, lyrics)
-│   ├── config/app_config.dart   # URLs, version, timeouts
-│   ├── models/                  # Track, Playlist, Artist, LinerUser, SearchResults, lyrics, player state
-│   ├── theme/app_theme.dart     # Liner color tokens and Material themes
-│   └── utils/                   # Lyric parser, formatters
-├── services/
-│   └── audio_player_service.dart  # just_audio queue and playback state
-├── providers/                   # Riverpod providers (auth, player, library, search, settings)
-└── ui/
-    ├── navigation/              # Auth gate and bottom navigation shell
-    ├── screens/                 # auth, home, search, library, player, settings
-    └── widgets/                 # Shared widgets (cover image, tiles, mini player, logo)
-assets/branding/                 # Official Liner logo and launcher-icon sources
-test/                            # Unit, API (fake HTTP adapter) and widget tests
-```
 
-## Getting started
+---
 
-Requires Flutter 3.44 or newer.
+## Getting Started
+
+### Prerequisites
+
+- Flutter `3.44+`
+- Dart `3.12+` (bundled with Flutter)
+- An Android emulator/device or an iOS simulator/device
+
+### Setup
 
 ```bash
+# 1. Clone the repository
+git clone https://github.com/theepar/liner-mobile.git
+cd liner-mobile
+
+# 2. Install packages
 flutter pub get
-flutter analyze
-flutter test
-flutter run
 ```
 
-### API server
-
-The app talks to production (`https://api.tryliner.fun`) by default and fails
-over to the edge relay automatically. To use another Liner instance, set the
-equivalent of the desktop's `VITE_API_URL` at build time:
+### Run in Development
 
 ```bash
+# Use the production API configuration
+flutter run
+
+# Or use an authorized custom Liner API instance
 flutter run --dart-define=LINER_API_URL=https://your-instance.example
 ```
 
-A custom URL disables automatic probing and failover.
+A custom `LINER_API_URL` disables endpoint probing and failover. Covers are
+served by the API response's `cover.url` or `cover.fallbackUrl`; the desktop
+covers proxy is not used.
 
-The production gateway only accepts requests carrying the `x-liner-signature`,
-`x-liner-timestamp` and `x-liner-nonce` headers, which the desktop app generates
-with its closed-source signer. This repository does not include a signer: provide
-an authorized `RequestSigner` (see `lib/core/api/request_signer.dart`) and install
-it with `ApiClient.instance.signer` in `main()`. Until then, sign-in fails with
-"The Liner server rejected this app".
+### Authorized API Signer
 
-### Launcher icons
+Install an authorized implementation before `runApp`:
 
-The icons are generated from the official Liner logo in `assets/branding/`:
+```dart
+ApiClient.instance.signer = authorizedSigner;
+```
+
+`RequestSigner` receives the exact serialized JSON body, request method, path,
+and server-adjusted timestamp required by the API gateway. Do not extract or
+imitate the desktop signer.
+
+---
+
+## Testing
 
 ```bash
+# Format source and tests
+dart format lib test
+
+# Static analysis (must remain at zero issues)
+flutter analyze
+
+# Unit, API, provider, and widget tests
+flutter test
+```
+
+---
+
+## Building
+
+```bash
+# Android release APK
+flutter build apk --release
+
+# Regenerate launcher icons after branding changes
 dart run flutter_launcher_icons
 ```
 
-### Android release signing
-
-Create `android/key.properties` (git-ignored) to sign release builds:
+To sign Android releases, create the git-ignored `android/key.properties`:
 
 ```properties
 storeFile=/absolute/path/to/upload-keystore.jks
@@ -97,13 +155,23 @@ keyAlias=upload
 keyPassword=...
 ```
 
-Without it, release builds fall back to the debug key so `flutter run --release`
-keeps working.
+---
 
-## Branding and licensing
+## Current Limitations
 
-The Liner name, logo and API belong to the Liner project. The upstream
-[`tryliner/desktop` license](https://github.com/tryliner/desktop/blob/main/LICENSE)
-is source-available and non-commercial, does not grant rights to Liner branding,
-and restricts public distribution of derivatives. Get written permission from
-the maintainers before publishing builds of this app.
+- No background playback or notification controls yet.
+- Deep links are parsed in-app, but device-level Android/iOS verification is pending.
+- The edge relay fallback uses HTTP; do not rely on it for sensitive credentials.
+- The app has no bundled `RequestSigner`, so the production gateway rejects sign-in.
+
+---
+
+## License
+
+Liner Mobile is distributed under the **Liner Source-Available & Non-Commercial Contribution License**.
+
+- **Allowed:** personal non-commercial use, local builds, and upstream contributions.
+- **Prohibited:** commercial distribution, public competing forks, and extraction of protected algorithms.
+
+See [LICENSE](./LICENSE) for the full terms. Liner branding and the Liner API
+remain subject to the upstream project's permissions and restrictions.

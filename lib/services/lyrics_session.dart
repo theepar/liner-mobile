@@ -1,11 +1,6 @@
 import '../core/models/lyric.dart';
 import '../core/utils/lyric_parser.dart';
 
-/// The lyrics available for one track: every provider that answered, which
-/// one is shown, and the user's timing offset.
-///
-/// Providers arrive over time. Until the user picks one, the best candidate
-/// seen so far is shown, so a better late arrival replaces a weaker early one.
 class LyricsSession {
   LyricsSession({required this.durationMs, int offsetMs = 0})
     : _offsetMs = offsetMs.clamp(-maxOffsetMs, maxOffsetMs);
@@ -38,14 +33,11 @@ class LyricsSession {
     return null;
   }
 
-  /// Lines of the active provider with the offset applied.
   List<LyricLine> get lines =>
       LyricParser.shift(_activeEntry?.document.lines ?? const [], _offsetMs);
 
   String? get plainText => _activeEntry?.document.plainText;
 
-  /// Adds a provider's lyrics. Returns false when they were unusable or the
-  /// provider was already added.
   bool add(LyricsCandidate candidate) {
     if (_entries.any((e) => e.candidate.provider == candidate.provider)) {
       return false;
@@ -63,7 +55,6 @@ class LyricsSession {
     return true;
   }
 
-  /// Switches to [provider]; false if it is unknown.
   bool select(String provider) {
     if (!_entries.any((e) => e.candidate.provider == provider)) return false;
     _userChose = true;

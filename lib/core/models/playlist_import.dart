@@ -43,8 +43,6 @@ class ImportResult {
   final int skipped;
 }
 
-/// A playlist import job, from `POST /v1/me/playlist-imports` and from the
-/// import worker's live `job` messages.
 class ImportJob {
   const ImportJob({
     required this.id,
@@ -92,8 +90,6 @@ class ImportJob {
   final String? importToken;
   final String? workerWsUrl;
 
-  /// Applies a live update from the worker, keeping what it does not resend
-  /// (such as the import token).
   ImportJob mergedWith(JsonMap update) {
     final next = ImportJob.fromJson({'id': id, ...update});
     return ImportJob(
@@ -159,7 +155,6 @@ class ImportedTrack {
   String get artistName => artists.join(', ');
 }
 
-/// One imported track whose catalog match needs the user's decision.
 class ImportReview {
   const ImportReview({
     required this.id,
@@ -191,8 +186,6 @@ class ImportReview {
   final ImportedTrack source;
   final Track? proposed;
 
-  /// The proposed track exactly as the API sent it; it is sent back verbatim
-  /// when approved.
   final JsonMap? proposedJson;
   final double? score;
   final String reason;
@@ -213,7 +206,6 @@ class ImportReviewDecision {
   };
 }
 
-/// Reviews the user can act on: unmatched tracks and duplicates are dropped.
 List<ImportReview> reviewableItems(Iterable<ImportReview> reviews) {
   final seen = <String>{};
   return [

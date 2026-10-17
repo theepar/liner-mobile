@@ -1,5 +1,3 @@
-/// Input rules the Liner backend enforces on login and registration. Checking
-/// them before sending avoids round trips that can only fail.
 abstract final class AuthValidation {
   static const minPasswordLength = 8;
   static const maxUsernameLength = 30;

@@ -17,7 +17,6 @@ import '../../widgets/track_action.dart';
 
 enum _PlaylistMenu { edit, delete }
 
-/// One of the user's own playlists, which can be renamed, emptied and deleted.
 class UserPlaylistScreen extends ConsumerWidget {
   const UserPlaylistScreen({super.key, required this.playlistId});
 

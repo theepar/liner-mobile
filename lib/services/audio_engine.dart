@@ -1,7 +1,5 @@
 import 'package:just_audio/just_audio.dart' as just_audio;
 
-/// What the player service needs from an audio backend; lets tests run
-/// without platform audio.
 abstract interface class AudioEngine {
   Stream<Duration> get positionStream;
   Stream<Duration?> get durationStream;
@@ -10,8 +8,7 @@ abstract interface class AudioEngine {
 
   Future<void> setUrl(String url);
 
-  /// Completes only when playback pauses or ends, so it must not be awaited
-  /// by callers.
+  /// Completes only after playback stops; callers must not await it.
   Future<void> play();
   Future<void> pause();
   Future<void> stop();

@@ -1,10 +1,7 @@
-/// Services playlists can be imported from.
 abstract final class ImportSources {
   static const supportedHint =
       'Paste a link from YouTube, SoundCloud, Spotify, Deezer or Apple Music';
 
-  /// Adds the scheme when missing and returns null for anything that is not a
-  /// usable web address.
   static Uri? normalize(String raw) {
     var text = raw.trim();
     if (text.isEmpty) return null;
@@ -18,7 +15,6 @@ abstract final class ImportSources {
     return uri;
   }
 
-  /// A display name for the service a link belongs to, or null if unknown.
   static String? detect(String raw) {
     final host = normalize(raw)?.host.toLowerCase().replaceFirst('www.', '');
     if (host == null) return null;
@@ -46,8 +42,6 @@ abstract final class ImportSources {
     return null;
   }
 
-  /// The SoundCloud likes page for a username, or the link itself when a full
-  /// address was given.
   static String soundCloudLikesUrl(String usernameOrUrl) {
     final value = usernameOrUrl.trim().replaceFirst(RegExp('^@'), '');
     if (value.startsWith('http://') || value.startsWith('https://')) {

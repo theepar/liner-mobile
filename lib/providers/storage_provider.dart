@@ -56,15 +56,9 @@ class StorageState {
   );
 }
 
-/// Measures and clears what Liner keeps on this device. Everything cleared is
-/// fetched again from the cloud when needed.
 class StorageController extends StateNotifier<StorageState> {
-  StorageController({
-    required DeviceCache covers,
-    required SearchHistoryNotifier history,
-  }) : _covers = covers,
-       _history = history,
-       super(const StorageState()) {
+  StorageController({required this._covers, required this._history})
+    : super(const StorageState()) {
     unawaited(refresh());
   }
 

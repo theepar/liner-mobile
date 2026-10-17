@@ -139,6 +139,5 @@ class _AddToPlaylistSheet extends ConsumerWidget {
   }
 }
 
-/// Shown when a playlist could not be changed.
 void showPlaylistError(BuildContext context) =>
     showMessage(context, 'Could not update the playlist.');

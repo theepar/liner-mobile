@@ -2,21 +2,15 @@ import '../core/models/playback_event.dart';
 import '../core/models/track.dart';
 import '../core/utils/uuid.dart';
 
-/// Measures how long each track was actually listened to and reports one
-/// [PlaybackEvent] per track. The API uses these events for history,
-/// recommendations and popularity.
 class PlaybackTelemetry {
   PlaybackTelemetry({
     required this.onEvent,
-    DateTime Function() clock = DateTime.now,
-    String Function() newId = newUuid,
-  }) : _clock = clock,
-       _newId = newId;
+    this._clock = DateTime.now,
+    this._newId = newUuid,
+  });
 
-  /// Tracks listened to for less than this are not reported.
   static const minReportedMs = 3000;
 
-  /// An incomplete track played for less than this counts as skipped.
   static const skipThresholdMs = 30000;
 
   static const sessionTimeout = Duration(minutes: 30);
@@ -37,7 +31,6 @@ class PlaybackTelemetry {
   bool _seekedBackward = false;
   PlaybackContext? _context;
 
-  /// Begins measuring [track], reporting the previous track first.
   void startTrack(Track track, PlaybackContext? context) {
     flush();
     _trackId = track.id;
@@ -73,7 +66,6 @@ class PlaybackTelemetry {
     _lastActivity = _clock();
   }
 
-  /// The track reached its end; [repeatOne] keeps measuring the same track.
   void onCompleted({required bool repeatOne}) {
     if (_trackId == null) return;
     _accumulate();
@@ -81,7 +73,6 @@ class PlaybackTelemetry {
     if (repeatOne) _loopCount += 1;
   }
 
-  /// Reports the current track if it was listened to long enough, then resets.
   void flush() {
     final trackId = _trackId;
     if (trackId == null) return;
@@ -118,8 +109,7 @@ class PlaybackTelemetry {
     _context = null;
   }
 
-  /// Only a stretch of real playback counts as activity; flushing a paused
-  /// track must not hide a long idle gap from the session-rotation check.
+  /// Counts only active playback so idle gaps rotate listening sessions.
   void _accumulate() {
     final since = _playingSince;
     if (since == null) return;

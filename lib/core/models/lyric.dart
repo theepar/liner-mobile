@@ -42,7 +42,6 @@ class LyricWord {
   final String text;
 }
 
-/// Consecutive syllables that belong to a single spoken word.
 class GroupedWord {
   const GroupedWord({
     required this.syllables,
@@ -57,7 +56,6 @@ class GroupedWord {
   final int endMs;
 }
 
-/// How precisely a lyrics source is timed.
 enum LyricsSyncLevel {
   syllable(3, 'Syllable synced'),
   word(2, 'Word synced'),
@@ -77,7 +75,6 @@ enum LyricsSyncLevel {
   };
 }
 
-/// One provider's lyrics as streamed by `GET /v1/tracks/:id/lyrics`.
 class LyricsCandidate {
   const LyricsCandidate({
     required this.provider,
@@ -87,7 +84,6 @@ class LyricsCandidate {
     this.quality = 0,
   });
 
-  /// Reads a `provider` event whose status is `found`.
   static LyricsCandidate? fromEvent(JsonMap event) {
     if (event['type'] != 'provider' || event['status'] != 'found') return null;
     final candidate = asMap(event['candidate']);
@@ -119,14 +115,12 @@ class LyricsCandidate {
   final LyricsSyncLevel syncLevel;
   final num quality;
 
-  /// Better synced candidates first, then higher quality.
   static int compare(LyricsCandidate a, LyricsCandidate b) {
     final bySync = b.syncLevel.rank.compareTo(a.syncLevel.rank);
     return bySync != 0 ? bySync : b.quality.compareTo(a.quality);
   }
 }
 
-/// Parsed lyrics: time-synced lines, or plain text when there is no timing.
 class LyricsDocument {
   const LyricsDocument({this.lines = const [], this.plainText});
 
@@ -137,7 +131,6 @@ class LyricsDocument {
   bool get isEmpty => lines.isEmpty && (plainText?.trim().isEmpty ?? true);
 }
 
-/// A provider the user can switch to.
 class LyricsOption {
   const LyricsOption({
     required this.provider,

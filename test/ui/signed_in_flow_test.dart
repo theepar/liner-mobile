@@ -9,7 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_api.dart';
 
-/// Tracks without artwork keep the test off the image cache's platform plugins.
 Map<String, Object?> _track(String id, String title) => {
   'id': id,
   'title': title,

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../widgets/detail_scaffold.dart';
 
-/// A settings sub-page with a title, a short description and its content.
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
     super.key,
@@ -83,7 +82,6 @@ class SettingsHeading extends StatelessWidget {
   );
 }
 
-/// Rounded group of settings rows separated by hairlines.
 class SettingsCard extends StatelessWidget {
   const SettingsCard({super.key, required this.children});
 
@@ -155,7 +153,6 @@ class SettingsOption<T> {
   final String? description;
 }
 
-/// One choice out of several, shown as a card of radio rows.
 class SettingsChoiceCard<T> extends StatelessWidget {
   const SettingsChoiceCard({
     super.key,

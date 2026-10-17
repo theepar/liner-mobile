@@ -52,10 +52,8 @@ class ApiException implements Exception {
 
   final String message;
 
-  /// Null when the server could not be reached at all.
   final int? statusCode;
 
-  /// Machine-readable error code from the API body, such as `USERNAME_TAKEN`.
   final String? code;
 
   final String? requestId;
@@ -104,8 +102,6 @@ class _Session {
   };
 }
 
-/// HTTP transport for the Liner API: base-URL failover, bearer sessions with
-/// transparent refresh, and the signed-in user.
 class ApiClient {
   ApiClient._(this._dio, this._storage) {
     _dio.interceptors.add(
@@ -138,15 +134,12 @@ class ApiClient {
   Future<bool>? _refreshing;
   int _serverClockOffsetMs = 0;
 
-  /// Signs outgoing requests when the API gateway requires it.
   RequestSigner? signer;
 
   String get baseUrl => _baseUrl;
   bool get isUsingFallback => _baseUrl == AppConfig.fallbackApiUrl;
   LinerUser? get currentUser => _currentUser;
 
-  /// Emits whenever the signed-in user changes, including when the server
-  /// revokes the session.
   Stream<LinerUser?> get userChanges => _userChanges.stream;
 
   static Dio _createDio() => Dio(
@@ -183,8 +176,7 @@ class ApiClient {
     await prefs.setString(_apiUrlPrefKey, _baseUrl);
   }
 
-  /// Selects the primary API when its health check passes, otherwise the edge
-  /// relay. A custom `LINER_API_URL` instance is never probed away from.
+  /// Keeps custom API URLs fixed; otherwise falls back when the primary health check fails.
   Future<String> probeEndpoint() async {
     if (AppConfig.hasCustomApiUrl) return _baseUrl;
     try {
@@ -206,8 +198,6 @@ class ApiClient {
     return _baseUrl;
   }
 
-  /// Pings the active server's open `/health` endpoint, without signing in,
-  /// failing over or retrying, so the result describes this server alone.
   Future<ConnectionReport> checkConnection() async {
     final probe = Dio(
       BaseOptions(
@@ -243,8 +233,6 @@ class ApiClient {
     _dio.options.baseUrl = url;
   }
 
-  /// Resolves a server-relative path (such as a playback `streamUrl`) against
-  /// the active base URL.
   String resolveUrl(String pathOrUrl) {
     if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
       return pathOrUrl;
@@ -299,7 +287,7 @@ class ApiClient {
 
   Future<Object?> delete(String path) => _send('DELETE', path);
 
-  /// Server-sent events: yields the joined `data:` payload of each event.
+  /// Reassembles fragmented SSE chunks into complete data payloads.
   Stream<String> getEventStream(
     String path, {
     Duration receiveTimeout = const Duration(seconds: 30),
@@ -379,9 +367,7 @@ class ApiClient {
     }
   }
 
-  /// Maps the API's error `code` first; the HTTP status only decides when the
-  /// body carries no code (a bare 401 comes from the gateway, not from a
-  /// wrong password).
+  /// Prioritizes API error codes because gateway 401s are not invalid credentials.
   static String _authMessage(DioException error) {
     final status = error.response?.statusCode;
     if (status == null) {
@@ -440,8 +426,7 @@ class ApiClient {
     }
   }
 
-  /// The signature covers the exact body string, so the body is encoded here
-  /// and sent as that same string.
+  /// Signs the exact serialized JSON body that Dio sends.
   Future<void> _sign(RequestOptions options) async {
     final signer = this.signer;
     if (signer == null) return;
@@ -481,7 +466,7 @@ class ApiClient {
     handler.next(response);
   }
 
-  /// Keeps signatures valid when the device clock drifts from the server's.
+  /// Aligns timestamps with the server to keep request signatures valid.
   void _syncClock(Headers? headers) {
     final seconds = int.tryParse(headers?.value('x-liner-server-time') ?? '');
     final dateHeader = headers?.value('date');

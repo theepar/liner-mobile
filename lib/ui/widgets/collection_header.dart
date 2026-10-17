@@ -12,7 +12,6 @@ import 'cover_image.dart';
 import 'song_tile.dart';
 import 'track_action.dart';
 
-/// Cover, title and details at the top of an album, playlist or artist page.
 class CollectionHeader extends StatelessWidget {
   const CollectionHeader({
     super.key,
@@ -144,7 +143,6 @@ class CollectionHeader extends StatelessWidget {
   }
 }
 
-/// Play and shuffle buttons for a list of tracks.
 class PlayActions extends ConsumerWidget {
   const PlayActions({super.key, required this.tracks, this.playbackContext});
 
@@ -195,7 +193,6 @@ class PlayActions extends ConsumerWidget {
   }
 }
 
-/// A column of [SongTile]s that plays the whole list from the tapped track.
 class TrackRows extends ConsumerWidget {
   const TrackRows({
     super.key,
@@ -209,7 +206,6 @@ class TrackRows extends ConsumerWidget {
   final PlaybackContext? playbackContext;
   final bool showRank;
 
-  /// Extra menu actions for the track at an index (for example removal).
   final List<TrackAction> Function(int index, Track track)? actionsFor;
 
   @override

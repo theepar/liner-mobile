@@ -3,7 +3,6 @@ import 'album.dart';
 import 'json_helpers.dart';
 import 'track.dart';
 
-/// The full artist page: profile plus top tracks, albums and singles.
 class ArtistDetails {
   const ArtistDetails({
     required this.id,
@@ -34,7 +33,6 @@ class ArtistDetails {
   final String avatarUrl;
   final String? bio;
 
-  /// Display text from the API, for example "12.3M".
   final String? monthlyListeners;
   final bool verified;
   final List<Track> tracks;

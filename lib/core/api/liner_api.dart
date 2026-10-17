@@ -208,8 +208,6 @@ class LinerApi {
     );
   }
 
-  /// Tracks similar to [trackId]; [history] lets the server avoid repeats and
-  /// [waveId] keeps successive pages of one station coherent.
   Future<List<Track>> getRadio(
     String trackId, {
     List<String> history = const [],
@@ -226,8 +224,6 @@ class LinerApi {
     return parseList(asMap(data)?['items'], Track.fromJson);
   }
 
-  /// Uses the `proxy` transport, which returns a plain stream URL. The
-  /// `direct_innertube` transport returns an InnerTube request plan instead.
   Future<String> getStreamUrl(String trackId, {String? preferredCodec}) async {
     final data = asMap(
       await _client.post(
@@ -242,8 +238,7 @@ class LinerApi {
     return _client.resolveUrl(streamUrl);
   }
 
-  /// Every provider's lyrics as they arrive on the lyrics stream, until the
-  /// server reports it is done or [_lyricsTimeout] passes.
+  /// Streams lyric providers until completion or the request timeout.
   Stream<LyricsCandidate> streamLyrics(String trackId) async* {
     final events = _client
         .getEventStream('/v1/tracks/${Uri.encodeComponent(trackId)}/lyrics')
@@ -277,7 +272,6 @@ class LinerApi {
     ];
   }
 
-  /// Returns whether the server finalized the playlist right away.
   Future<bool> decidePlaylistImportReview(
     String importId, {
     required List<ImportReviewDecision> decisions,
@@ -291,7 +285,6 @@ class LinerApi {
     'description': ?description,
   });
 
-  /// Finishes the import with only the tracks that were matched automatically.
   Future<bool> skipPlaylistImportReview(
     String importId, {
     List<JsonMap> approvedTracks = const [],

@@ -222,8 +222,6 @@ class _PlainLine extends StatelessWidget {
   );
 }
 
-/// The line being sung, filled in syllable by syllable. Only this widget
-/// follows the playback position.
 class _ActiveWordLine extends ConsumerWidget {
   const _ActiveWordLine({required this.line});
 

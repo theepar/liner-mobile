@@ -7,7 +7,6 @@ import '../../../providers/import_provider.dart';
 import '../../navigation/navigation_helpers.dart';
 import 'import_review_screen.dart';
 
-/// The state of the playlist import in progress (or just finished).
 class ImportProgressCard extends ConsumerWidget {
   const ImportProgressCard({super.key});
 

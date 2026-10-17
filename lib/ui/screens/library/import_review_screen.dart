@@ -19,8 +19,6 @@ String _reasonLabel(String reason) => switch (reason) {
   _ => 'Low confidence',
 };
 
-/// Lets the user confirm or reject the catalog matches the importer was unsure
-/// about before the playlist is created.
 class ImportReviewScreen extends ConsumerStatefulWidget {
   const ImportReviewScreen({super.key});
 

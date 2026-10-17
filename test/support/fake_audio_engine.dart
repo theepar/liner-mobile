@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:liner_mobile/services/audio_engine.dart';
 
-/// An [AudioEngine] that records calls and lets a test drive playback.
 class FakeAudioEngine implements AudioEngine {
   final _position = StreamController<Duration>.broadcast();
   final _duration = StreamController<Duration?>.broadcast();
@@ -73,7 +72,6 @@ class FakeAudioEngine implements AudioEngine {
     await _state.close();
   }
 
-  /// The track reached its end while playing.
   void complete() => _emit(EngineProcessing.completed);
 
   void emitPosition(Duration position) => _position.add(position);

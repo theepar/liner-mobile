@@ -50,7 +50,6 @@ class SearchNotifier extends StateNotifier<SearchState> {
   Timer? _debounceTimer;
   int _requestId = 0;
 
-  /// Debounced; results of superseded queries are discarded.
   void search(String query) {
     _debounceTimer?.cancel();
     final trimmed = query.trim();

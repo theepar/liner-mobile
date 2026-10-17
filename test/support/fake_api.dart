@@ -50,7 +50,6 @@ ResponseBody sseResponse(List<Object> events) => ResponseBody(
   },
 );
 
-/// A `provider` event of the lyrics stream whose status is `found`.
 Map<String, Object?> lyricsProviderEvent(
   String provider,
   String format,

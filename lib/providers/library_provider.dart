@@ -34,7 +34,6 @@ final savedPlaylistsProvider = FutureProvider<List<Playlist>>((ref) {
   return ref.watch(linerApiProvider).getSavedPlaylists();
 });
 
-/// Ids of the albums, artists or playlists the user has saved.
 final savedIdsProvider = Provider.family<Set<String>, CollectionType>(
   (ref, type) => switch (type) {
     CollectionType.albums => {
@@ -126,8 +125,6 @@ class LikedTracksNotifier extends StateNotifier<LikedTracksState> {
     }
   }
 
-  /// Optimistically flips the like, restoring the previous state and
-  /// rethrowing if the server rejects the change.
   Future<void> toggle(Track track) async {
     final previous = state;
     final wasLiked = previous.ids.contains(track.id);

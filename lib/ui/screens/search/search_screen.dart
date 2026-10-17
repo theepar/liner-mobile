@@ -212,7 +212,6 @@ class _FilterPills extends StatelessWidget {
   }
 }
 
-/// Shown while the query is empty: recent searches and quick topics.
 class _Browse extends ConsumerWidget {
   const _Browse({required this.onSelected});
 

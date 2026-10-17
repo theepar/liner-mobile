@@ -1,6 +1,5 @@
 import 'dart:io';
 
-/// A live connection to the playlist import worker.
 abstract interface class WorkerConnection {
   Stream<String> get messages;
 
@@ -10,7 +9,7 @@ abstract interface class WorkerConnection {
 typedef WorkerConnector = Future<WorkerConnection> Function(Uri uri);
 
 Future<WorkerConnection> connectToImportWorker(Uri uri) async {
-  // The socket is closed through [WorkerConnection.close].
+  // Closed through WorkerConnection.close.
   // ignore: close_sinks
   final socket = await WebSocket.connect(
     uri.toString(),

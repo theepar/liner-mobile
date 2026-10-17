@@ -17,8 +17,6 @@ import 'playback_settings_page.dart';
 import 'settings_widgets.dart';
 import 'storage_settings_page.dart';
 
-/// A page of settings and the individual settings on it, which is what the
-/// search box looks through.
 class SettingsDestination {
   const SettingsDestination({
     required this.title,

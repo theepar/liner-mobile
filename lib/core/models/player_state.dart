@@ -42,7 +42,6 @@ class PlayerStateData {
   final String? activeLyricsProvider;
   final int lyricsOffsetMs;
 
-  /// Set instead of [lyrics] when the active provider has no timing.
   final String? lyricsPlainText;
   final bool isLoadingLyrics;
 
@@ -57,8 +56,6 @@ class PlayerStateData {
     return (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
   }
 
-  /// Replaces every lyrics field at once, so a provider without plain text
-  /// (or without a selection) clears what the previous one left behind.
   PlayerStateData withLyrics({
     required List<LyricLine> lines,
     required List<LyricsOption> options,

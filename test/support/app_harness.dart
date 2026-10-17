@@ -13,7 +13,6 @@ import 'fake_api.dart';
 
 typedef RouteHandler = Object? Function(RequestOptions options);
 
-/// A source that never delivers a link, so tests need no platform plugin.
 class NoDeepLinks implements DeepLinkSource {
   const NoDeepLinks();
 
@@ -21,7 +20,6 @@ class NoDeepLinks implements DeepLinkSource {
   Stream<Uri> get links => const Stream.empty();
 }
 
-/// A track without artwork keeps tests off the image cache's platform plugins.
 Map<String, Object?> plainTrack(String id, {String? title}) => {
   'id': id,
   'title': title ?? 'Track $id',
@@ -32,8 +30,6 @@ Map<String, Object?> plainTrack(String id, {String? title}) => {
   'durationMs': 180000,
 };
 
-/// A backend answering the screens' startup requests; [routes] (keyed by
-/// `METHOD /path`) override or extend it. Every request is appended to [log].
 FakeAdapter fakeBackend({
   Map<String, RouteHandler> routes = const {},
   List<RequestOptions>? log,

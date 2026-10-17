@@ -14,8 +14,6 @@ class Album {
     this.tracks = const [],
   });
 
-  /// Tracks without artwork or album data of their own inherit the album's, so
-  /// a queue built from an album still shows its cover.
   factory Album.fromJson(JsonMap json) {
     final id = json['id']?.toString() ?? '';
     final title = asString(json['title']) ?? 'Untitled Album';

@@ -7,7 +7,6 @@ final packageInfoProvider = FutureProvider<PackageInfo>(
   (ref) => PackageInfo.fromPlatform(),
 );
 
-/// Opens a link outside the app; false when nothing could handle it.
 typedef LinkLauncher = Future<bool> Function(Uri uri);
 
 final linkLauncherProvider = Provider<LinkLauncher>(

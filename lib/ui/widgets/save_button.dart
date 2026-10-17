@@ -6,7 +6,6 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/library_provider.dart';
 import '../utils/ui_helpers.dart';
 
-/// Adds or removes an album, artist or playlist from the user's library.
 class SaveButton extends ConsumerWidget {
   const SaveButton({super.key, required this.type, required this.id});
 

@@ -1,6 +1,5 @@
 import 'json_helpers.dart';
 
-/// Where playback was started from, reported to the API for recommendations.
 class PlaybackContext {
   const PlaybackContext(this.type, [this.id]);
 
@@ -16,7 +15,6 @@ class PlaybackContext {
   JsonMap toJson() => {'type': type, 'id': ?id};
 }
 
-/// Body of `POST /v1/me/playback/events`.
 class PlaybackEvent {
   const PlaybackEvent({
     required this.playbackSessionId,

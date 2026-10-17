@@ -4,14 +4,12 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Something the app keeps on this device that can be measured and cleared.
 abstract interface class DeviceCache {
   Future<int> sizeBytes();
 
   Future<void> clear();
 }
 
-/// Cover artwork downloaded by `CachedNetworkImage`.
 class CoverImageCache implements DeviceCache {
   const CoverImageCache();
 

@@ -1,5 +1,3 @@
-/// The look of the Liner logo. Mirrors the variants of the desktop app, whose
-/// ids name the files in `assets/branding/logos/`.
 enum BrandingVariant {
   standard('default', 'Default'),
   spotify('spotify', 'Spotify'),

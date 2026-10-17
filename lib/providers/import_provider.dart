@@ -40,11 +40,8 @@ class ImportState {
   final bool isStarting;
   final String? error;
 
-  /// Reviews delivered with the worker's updates, if any.
   final List<ImportReview>? reviews;
 
-  /// Tracks the importer already matched with confidence, sent back verbatim
-  /// when the review is submitted.
   final List<JsonMap> approvedTracks;
 
   bool get isRunning =>
@@ -67,17 +64,15 @@ class ImportState {
   );
 }
 
-/// Runs one playlist import at a time: creates the job, follows its progress
-/// on the import worker (falling back to polling) and handles the review step.
+/// Uses worker updates, then polling, to keep one playlist import in sync.
 class ImportController extends StateNotifier<ImportState> {
   ImportController(
     this._api, {
     required this.onLibraryChanged,
-    WorkerConnector connector = connectToImportWorker,
+    this._connector = connectToImportWorker,
     this.pollInterval = const Duration(seconds: 1),
     this.maxPolls = 900,
-  }) : _connector = connector,
-       super(const ImportState());
+  }) : super(const ImportState());
 
   final LinerApi _api;
   final void Function() onLibraryChanged;
@@ -90,7 +85,6 @@ class ImportController extends StateNotifier<ImportState> {
   Timer? _pollTimer;
   int _polls = 0;
 
-  /// Throws [ApiException] if the job cannot be created.
   Future<void> start(String url) async {
     await _stopWork();
     state = const ImportState(isStarting: true);
@@ -117,7 +111,6 @@ class ImportController extends StateNotifier<ImportState> {
     }
   }
 
-  /// The reviews the user can act on, fetched if the worker did not send them.
   Future<List<ImportReview>> loadReviews() async {
     final job = state.job;
     if (job == null) return const [];
@@ -169,7 +162,6 @@ class ImportController extends StateNotifier<ImportState> {
     await _afterReview(job.id, finalized: finalized);
   }
 
-  /// Finishes the import keeping only the automatically matched tracks.
   Future<void> skipReview() async {
     final job = state.job;
     if (job == null) return;
@@ -290,7 +282,7 @@ class ImportController extends StateNotifier<ImportState> {
     }
   }
 
-  /// The playlist id can arrive after completion; wait for it briefly.
+  /// Polls briefly because completion can arrive before the playlist ID.
   Future<void> _syncCompleted(ImportJob job) async {
     var latest = job;
     for (
@@ -301,7 +293,7 @@ class ImportController extends StateNotifier<ImportState> {
       try {
         latest = await _api.getPlaylistImport(job.id);
       } on ApiException {
-        // Retry below.
+        // Retries on the next poll.
       }
       if (latest.playlistId == null) {
         await Future<void>.delayed(const Duration(milliseconds: 800));

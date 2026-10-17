@@ -5,8 +5,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/models/branding_variant.dart';
 import '../../providers/settings_provider.dart';
 
-/// The official Liner mark in the branding variant the user picked, or
-/// [variant] when previewing one.
 class LinerLogo extends ConsumerWidget {
   const LinerLogo({super.key, this.size = 32, this.variant});
 

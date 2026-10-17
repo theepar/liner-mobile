@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-/// An extra entry for a track's options menu, such as removing it from the
-/// playlist being viewed.
 class TrackAction {
   const TrackAction({
     required this.icon,

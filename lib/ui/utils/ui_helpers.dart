@@ -21,8 +21,6 @@ void showMessage(BuildContext context, String message) {
     );
 }
 
-/// Handles a tap on a song: plays it, or queues it when the user chose that
-/// in settings. With nothing playing there is no queue to add to, so it plays.
 void playTapped(
   BuildContext context,
   WidgetRef ref,
@@ -68,7 +66,6 @@ Future<void> toggleLike(
   }
 }
 
-/// Saves or removes an album, artist or playlist from the user's library.
 Future<void> toggleSaved(
   BuildContext context,
   WidgetRef ref,

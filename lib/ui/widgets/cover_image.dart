@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 
-/// Artwork with a server-provided fallback URL, then a neutral placeholder.
 class CoverImage extends StatelessWidget {
   const CoverImage({
     super.key,

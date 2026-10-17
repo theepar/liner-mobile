@@ -21,8 +21,7 @@ Future<void> main() async {
     ),
   );
 
-  // A slow network must not keep the app from opening; init keeps running and
-  // the saved session is restored from local storage first.
+  // Start UI while endpoint probing continues in the background.
   await ApiClient.instance.init().timeout(_startupTimeout, onTimeout: () {});
 
   runApp(const ProviderScope(child: LinerApp()));

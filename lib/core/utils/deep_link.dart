@@ -19,9 +19,6 @@ class DeepLinkTarget {
   String toString() => 'DeepLinkTarget(${type.name}, $id)';
 }
 
-/// Reads `liner://{artist|album|playlist|track}?id=...` links, the form that
-/// shared `link.tryliner.fun` addresses redirect to. The rules are the desktop
-/// app's: a fixed set of types, exactly one `id`, and only opaque catalog ids.
 abstract final class DeepLinks {
   static final _idPatterns = {
     DeepLinkType.artist: RegExp(r'^UC[A-Za-z0-9_-]{22}$'),
@@ -51,7 +48,6 @@ abstract final class DeepLinks {
     return DeepLinkTarget(type, id);
   }
 
-  /// A user's own playlist (a uuid or a `pl-` token) rather than a catalog one.
   static bool isUserPlaylistId(String id) =>
       id.startsWith('pl-') || _userPlaylistId.hasMatch(id);
 }

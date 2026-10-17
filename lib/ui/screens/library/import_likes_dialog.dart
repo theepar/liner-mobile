@@ -7,7 +7,6 @@ import '../../../core/utils/import_source.dart';
 import '../../../providers/import_provider.dart';
 import '../../widgets/dark_input.dart';
 
-/// Imports a SoundCloud user's liked tracks as a playlist.
 Future<void> showImportLikesDialog(BuildContext context) => showDialog<void>(
   context: context,
   builder: (_) => const _ImportLikesDialog(),

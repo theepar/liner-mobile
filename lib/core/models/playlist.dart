@@ -2,8 +2,6 @@ import '../config/app_config.dart';
 import 'json_helpers.dart';
 import 'track.dart';
 
-/// Catalog playlists, user playlists and daily mixes share this shape; fields
-/// a given endpoint does not provide stay empty or null.
 class Playlist {
   const Playlist({
     required this.id,
@@ -37,8 +35,6 @@ class Playlist {
   String get deepLink => AppConfig.deepLink('playlist', id);
 }
 
-/// A track inside one of the user's playlists; [id] identifies the entry (not
-/// the track) for removal.
 class PlaylistItem {
   const PlaylistItem({required this.id, required this.track});
 

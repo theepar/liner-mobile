@@ -18,7 +18,6 @@ const _highQualityKey = 'liner_high_quality_audio';
 const _animatedBackgroundKey = 'liner_animated_background';
 const _brandingKey = 'liner_branding';
 
-/// What tapping a song in a list does.
 enum TrackTapAction { play, queue }
 
 class SettingsState {
@@ -115,7 +114,6 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     await prefs.setString(_brandingKey, variant.id);
   }
 
-  /// Restores every preference to its default. The chosen API server is kept.
   Future<void> resetPreferences() async {
     state = SettingsState(
       currentBaseUrl: state.currentBaseUrl,

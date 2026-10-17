@@ -14,8 +14,6 @@ import '../../widgets/cover_image.dart';
 import '../../widgets/track_action.dart';
 import 'add_to_playlist_sheet.dart';
 
-/// The actions available for a track. [beforeNavigate] runs before leaving for
-/// an artist or album page, for example to close the fullscreen player.
 Future<void> showTrackOptionsSheet(
   BuildContext context,
   Track track, {
@@ -49,7 +47,6 @@ class _TrackOptionsSheet extends ConsumerWidget {
 
   final Track track;
 
-  /// The context the sheet was opened from; it outlives the sheet.
   final BuildContext origin;
   final List<TrackAction> extraActions;
   final VoidCallback? beforeNavigate;

@@ -6,8 +6,7 @@ import '../models/json_helpers.dart';
 import '../models/lyric.dart';
 
 class LyricParser {
-  /// Parses time-synced lyrics: Richsync JSON or LRC (optionally with
-  /// word-level `<mm:ss.xx>` tags). Text without timing yields no lines.
+  /// Parses only timed Richsync or LRC lyrics; untimed text yields no lines.
   static List<LyricLine> parse(String raw, {int songDurationMs = 0}) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) return [];
@@ -159,9 +158,7 @@ class LyricParser {
     return result;
   }
 
-  /// Parses one provider's lyrics according to its declared format. Synced
-  /// formats that yield no timed lines produce an empty document rather than
-  /// text with invented timing.
+  /// Rejects malformed synchronized lyrics instead of inventing timestamps.
   static LyricsDocument parseCandidate(
     LyricsCandidate candidate, {
     int songDurationMs = 0,
@@ -182,8 +179,6 @@ class LyricParser {
     return const LyricsDocument();
   }
 
-  /// Moves every line and word by [offsetMs]; positive values show the lyrics
-  /// later.
   static List<LyricLine> shift(List<LyricLine> lines, int offsetMs) {
     if (offsetMs == 0) return lines;
     int move(int value) => value + offsetMs < 0 ? 0 : value + offsetMs;
@@ -206,8 +201,6 @@ class LyricParser {
     ];
   }
 
-  /// Timed-text (TTML) lyrics: line paragraphs with optional timed spans for
-  /// words or syllables.
   static List<LyricLine> parseTtml(String raw) {
     final XmlDocument document;
     try {
@@ -310,7 +303,6 @@ class LyricParser {
   static String _collapseWhitespace(String text) =>
       text.replaceAll(RegExp(r'\s+'), ' ').trim();
 
-  /// QRC lyrics: `[lineStartMs,lineDurationMs]word(startMs,durationMs)...`.
   static List<LyricLine> parseQrc(String raw) {
     var text = raw;
     final wrapped = RegExp(r'LyricContent="([^"]*)"').firstMatch(raw);

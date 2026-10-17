@@ -1,4 +1,3 @@
-/// The outcome of pinging the active API server's health endpoint.
 class ConnectionReport {
   const ConnectionReport({
     required this.baseUrl,
@@ -11,7 +10,6 @@ class ConnectionReport {
   final int? statusCode;
   final Duration? latency;
 
-  /// Why the server could not be reached, when it could not.
   final String? failure;
 
   bool get isReachable => statusCode == 200;

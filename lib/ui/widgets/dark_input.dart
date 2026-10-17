@@ -35,7 +35,6 @@ InputDecoration darkInputDecoration({
   );
 }
 
-/// A two-or-more option switch styled like the desktop's tab control.
 class SegmentedTabs<T> extends StatelessWidget {
   const SegmentedTabs({
     super.key,

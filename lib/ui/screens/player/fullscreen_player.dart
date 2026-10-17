@@ -16,7 +16,6 @@ import 'queue_sheet.dart';
 import 'speed_pitch_sheet.dart';
 import 'track_options_sheet.dart';
 
-/// Slides the now-playing screen up over whatever is showing.
 PageRouteBuilder<void> fullscreenPlayerRoute() => PageRouteBuilder<void>(
   pageBuilder: (_, _, _) => const FullscreenPlayer(),
   transitionsBuilder: (_, animation, _, child) => SlideTransition(
@@ -433,8 +432,7 @@ class _PlayPauseButton extends StatelessWidget {
   }
 }
 
-/// Follows playback while idle and the finger while dragging, seeking once on
-/// release instead of on every drag frame.
+/// Seeks only on drag release to avoid flooding the audio engine.
 class _SeekBar extends ConsumerStatefulWidget {
   const _SeekBar();
 

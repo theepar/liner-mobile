@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/models/json_helpers.dart';
 
-/// Remembers the timing offset the user chose for each track.
 abstract interface class LyricsOffsetStore {
   Future<int> read(String trackId);
 

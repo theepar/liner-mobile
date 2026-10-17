@@ -18,11 +18,9 @@ class AudioPlayerService {
   AudioPlayerService(
     this._api, {
     AudioEngine? engine,
-    DateTime Function() clock = DateTime.now,
-    LyricsOffsetStore offsets = const PrefsLyricsOffsetStore(),
-  }) : _engine = engine ?? JustAudioEngine(),
-       _clock = clock,
-       _offsets = offsets {
+    this._clock = DateTime.now,
+    this._offsets = const PrefsLyricsOffsetStore(),
+  }) : _engine = engine ?? JustAudioEngine() {
     _subscriptions.addAll([
       _engine.positionStream.listen(
         (position) => _emit(_currentState.copyWith(position: position)),
@@ -54,16 +52,14 @@ class AudioPlayerService {
   String _waveId = newUuid();
   bool _isFetchingRadio = false;
 
-  /// When on, similar tracks are appended as the queue runs out.
   bool autoplaySimilar = true;
 
   Stream<PlayerStateData> get stateStream => _stateController.stream;
   PlayerStateData get currentState => _currentState;
 
-  /// Asks the server for AAC instead of its default codec.
   bool highQuality = false;
 
-  /// AVPlayer cannot decode WebM/Opus, so iOS always asks the server for AAC.
+  /// iOS requests AAC because AVPlayer cannot decode WebM/Opus.
   String? get _preferredCodec =>
       highQuality || defaultTargetPlatform == TargetPlatform.iOS ? 'aac' : null;
 
@@ -170,8 +166,7 @@ class AudioPlayerService {
     }
   }
 
-  /// `AudioEngine.play` completes only when playback pauses or ends, so it
-  /// must never be awaited by callers.
+  /// Keep this detached because AudioEngine.play completes only after playback stops.
   Future<void> _startPlayback(int requestId) async {
     try {
       await _engine.play();
@@ -223,15 +218,12 @@ class AudioPlayerService {
     );
   }
 
-  /// Switches to another provider's lyrics for the current track.
   void selectLyricsProvider(String provider) {
     final session = _lyricsSession;
     if (session == null || !session.select(provider)) return;
     _emitLyrics(session);
   }
 
-  /// Shifts the lyrics timing for the current track and remembers it; positive
-  /// values show the lyrics later.
   Future<void> setLyricsOffset(int offsetMs) async {
     final session = _lyricsSession;
     final track = _currentState.currentTrack;
@@ -253,7 +245,6 @@ class AudioPlayerService {
     }
   }
 
-  /// Queues [track] after the current one, or at the end.
   void addToQueue(Track track, {bool next = false}) {
     if (_currentState.currentTrack == null) {
       unawaited(playTrack(track));
@@ -264,12 +255,9 @@ class AudioPlayerService {
     _emitQueue();
   }
 
-  /// Starts a station seeded with [seed]; similar tracks follow it.
   Future<void> startRadio(Track seed) =>
       setQueue([seed], context: PlaybackContext('radio', seed.id));
 
-  /// A track played on its own has no queue yet; give it one so tracks can be
-  /// inserted around it.
   void _ensureQueueHoldsCurrentTrack() {
     final current = _currentState.currentTrack;
     if (_queue.isEmpty && current != null) {

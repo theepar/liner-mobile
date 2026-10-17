@@ -22,7 +22,6 @@ class SongTile extends ConsumerWidget {
   final int? rank;
   final VoidCallback onTap;
 
-  /// Extra entries for this tile's options menu.
   final List<TrackAction> extraActions;
 
   @override

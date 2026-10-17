@@ -5,7 +5,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../providers/player_provider.dart';
 
-/// Switches between lyrics providers and adjusts the timing offset.
 class LyricsToolbar extends ConsumerWidget {
   const LyricsToolbar({super.key});
 

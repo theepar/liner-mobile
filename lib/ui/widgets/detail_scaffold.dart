@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'mini_player.dart';
 import 'status_views.dart';
 
-/// Frame for pages opened from the main tabs; keeps the mini player in reach.
 class DetailScaffold extends StatelessWidget {
   const DetailScaffold({super.key, required this.body, this.actions});
 
@@ -27,7 +26,6 @@ class DetailScaffold extends StatelessWidget {
   }
 }
 
-/// Loading, error and content states for a page backed by a single request.
 Widget detailBody<T>(
   AsyncValue<T> value, {
   required String errorMessage,

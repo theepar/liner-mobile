@@ -14,8 +14,6 @@ int? asInt(Object? value) => switch (value) {
   _ => null,
 };
 
-/// Parses every map entry of [raw] with [parse], skipping malformed entries so
-/// that one bad item never discards the whole list.
 List<T> parseList<T>(Object? raw, T Function(JsonMap json) parse) {
   if (raw is! List) return <T>[];
   return [

@@ -9,8 +9,6 @@ final deepLinkSourceProvider = Provider<DeepLinkSource>(
   (ref) => const PlatformDeepLinkSource(),
 );
 
-/// The latest valid link that has not been opened yet. It waits here while the
-/// user is signed out, and the signed-in shell opens it and clears it.
 final pendingDeepLinkProvider =
     StateNotifierProvider<PendingDeepLink, DeepLinkTarget?>(
       (ref) => PendingDeepLink(ref.watch(deepLinkSourceProvider)),

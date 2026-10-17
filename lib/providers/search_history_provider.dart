@@ -11,7 +11,6 @@ final searchHistoryProvider =
       (ref) => SearchHistoryNotifier(),
     );
 
-/// The most recent searches, newest first, kept on this device.
 class SearchHistoryNotifier extends StateNotifier<List<String>> {
   SearchHistoryNotifier() : super(const []) {
     unawaited(loaded);
@@ -19,7 +18,6 @@ class SearchHistoryNotifier extends StateNotifier<List<String>> {
 
   static const maxItems = 30;
 
-  /// Completes once the saved searches have been read from the device.
   late final Future<void> loaded = _load();
 
   int get storedBytes =>

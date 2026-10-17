@@ -10,8 +10,6 @@ final authProvider = StateNotifierProvider<AuthNotifier, LinerUser?>(
   (ref) => AuthNotifier(ref.watch(apiClientProvider)),
 );
 
-/// Changes only when the signed-in account changes; data providers watch this
-/// so they reload for a different user.
 final userIdProvider = Provider<String?>(
   (ref) => ref.watch(authProvider.select((user) => user?.id)),
 );
@@ -24,7 +22,6 @@ class AuthNotifier extends StateNotifier<LinerUser?> {
   final ApiClient _client;
   late final StreamSubscription<LinerUser?> _subscription;
 
-  /// Throws [AuthException] with a user-facing message on failure.
   Future<void> signIn(String email, String password) async {
     state = await _client.login(email, password);
   }

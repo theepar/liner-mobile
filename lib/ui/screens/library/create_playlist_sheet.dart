@@ -14,9 +14,6 @@ import '../../widgets/dark_input.dart';
 
 enum CreatePlaylistTab { scratch, import }
 
-/// "From scratch" and "Import" in one sheet. When [pendingTrack] is given, the
-/// new playlist starts with that track. Returns the playlist when one was
-/// created from scratch.
 Future<Playlist?> showCreatePlaylistSheet(
   BuildContext context, {
   CreatePlaylistTab tab = CreatePlaylistTab.scratch,

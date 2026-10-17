@@ -12,7 +12,6 @@ class SearchResults {
     this.playlists = const [],
   });
 
-  /// The API returns one heterogeneous `items` list discriminated by `type`.
   factory SearchResults.fromJson(JsonMap json) {
     final tracks = <Track>[];
     final artists = <Artist>[];

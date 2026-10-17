@@ -8,7 +8,6 @@ import '../../widgets/collection_header.dart';
 import '../../widgets/detail_scaffold.dart';
 import '../../widgets/save_button.dart';
 
-/// A playlist from the catalog (not one of the user's own).
 class CatalogPlaylistScreen extends ConsumerWidget {
   const CatalogPlaylistScreen({super.key, required this.playlistId});
 
