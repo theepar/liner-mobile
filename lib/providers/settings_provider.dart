@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,8 +18,26 @@ const _trackTapActionKey = 'liner_track_tap_action';
 const _highQualityKey = 'liner_high_quality_audio';
 const _animatedBackgroundKey = 'liner_animated_background';
 const _brandingKey = 'liner_branding';
+const _localeKey = 'liner_locale';
 
 enum TrackTapAction { play, queue }
+
+enum AppLocale {
+  system(null, 'System default'),
+  english(Locale('en'), 'English'),
+  russian(Locale('ru'), 'Русский'),
+  ukrainian(Locale('uk'), 'Українська');
+
+  const AppLocale(this.locale, this.label);
+
+  final Locale? locale;
+  final String label;
+
+  static AppLocale fromId(String? id) => AppLocale.values.firstWhere(
+    (locale) => locale.name == id,
+    orElse: () => AppLocale.system,
+  );
+}
 
 class SettingsState {
   const SettingsState({
@@ -29,6 +48,7 @@ class SettingsState {
     this.highQualityAudio = false,
     this.animatedBackground = true,
     this.branding = BrandingVariant.standard,
+    this.locale = AppLocale.system,
   });
 
   final String currentBaseUrl;
@@ -38,6 +58,7 @@ class SettingsState {
   final bool highQualityAudio;
   final bool animatedBackground;
   final BrandingVariant branding;
+  final AppLocale locale;
 
   SettingsState copyWith({
     String? currentBaseUrl,
@@ -47,6 +68,7 @@ class SettingsState {
     bool? highQualityAudio,
     bool? animatedBackground,
     BrandingVariant? branding,
+    AppLocale? locale,
   }) => SettingsState(
     currentBaseUrl: currentBaseUrl ?? this.currentBaseUrl,
     isUsingFallback: isUsingFallback ?? this.isUsingFallback,
@@ -55,6 +77,7 @@ class SettingsState {
     highQualityAudio: highQualityAudio ?? this.highQualityAudio,
     animatedBackground: animatedBackground ?? this.animatedBackground,
     branding: branding ?? this.branding,
+    locale: locale ?? this.locale,
   );
 }
 
@@ -81,6 +104,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       highQualityAudio: prefs.getBool(_highQualityKey) ?? false,
       animatedBackground: prefs.getBool(_animatedBackgroundKey) ?? true,
       branding: BrandingVariant.fromId(prefs.getString(_brandingKey)),
+      locale: AppLocale.fromId(prefs.getString(_localeKey)),
     );
   }
 
@@ -114,6 +138,12 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     await prefs.setString(_brandingKey, variant.id);
   }
 
+  Future<void> setLocale(AppLocale locale) async {
+    state = state.copyWith(locale: locale);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_localeKey, locale.name);
+  }
+
   Future<void> resetPreferences() async {
     state = SettingsState(
       currentBaseUrl: state.currentBaseUrl,
@@ -126,6 +156,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       _highQualityKey,
       _animatedBackgroundKey,
       _brandingKey,
+      _localeKey,
     ]) {
       await prefs.remove(key);
     }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'fake_api.dart';
 
 typedef RouteHandler = Object? Function(RequestOptions options);
+
+class FakeDeepLinks implements DeepLinkSource {
+  final _controller = StreamController<Uri>.broadcast(sync: true);
+
+  @override
+  Stream<Uri> get links => _controller.stream;
+
+  void emit(String raw) => _controller.add(Uri.parse(raw));
+
+  Future<void> dispose() => _controller.close();
+}
 
 class NoDeepLinks implements DeepLinkSource {
   const NoDeepLinks();
@@ -65,6 +78,7 @@ Future<void> signedInApp(
   List<Override> overrides = const [],
   Map<String, Object> preferences = const {},
   DeepLinkSource deepLinks = const NoDeepLinks(),
+  Future<void> Function()? beforeSignIn,
 }) async {
   FlutterSecureStorage.setMockInitialValues({});
   SharedPreferences.setMockInitialValues(preferences);
@@ -78,6 +92,7 @@ Future<void> signedInApp(
       child: const LinerApp(),
     ),
   );
+  await beforeSignIn?.call();
   await tester.enterText(
     find.widgetWithText(TextFormField, 'Email'),
     'me@example.com',

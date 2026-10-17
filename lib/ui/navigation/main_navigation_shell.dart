@@ -29,7 +29,8 @@ class MainNavigationShell extends ConsumerStatefulWidget {
       _MainNavigationShellState();
 }
 
-class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
+class _MainNavigationShellState extends ConsumerState<MainNavigationShell>
+    with WidgetsBindingObserver {
   static const _screens = <Widget>[
     HomeScreen(),
     SearchScreen(),
@@ -42,7 +43,27 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _openPendingLink());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openNowPlaying());
+    }
+  }
+
+  void _openNowPlaying() {
+    if (!mounted || Navigator.of(context).canPop()) return;
+    if (ref.read(playerStateProvider).currentTrack == null) return;
+    unawaited(Navigator.of(context).push(fullscreenPlayerRoute()));
   }
 
   void _openPendingLink() {

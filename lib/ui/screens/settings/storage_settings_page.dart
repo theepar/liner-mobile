@@ -10,6 +10,7 @@ import 'settings_widgets.dart';
 
 const _categoryColors = {
   StorageCategory.covers: LinerColors.accentPrimary,
+  StorageCategory.audio: Color(0xFFA78BFA),
   StorageCategory.searchHistory: Color(0xFF60A5FA),
 };
 
@@ -153,8 +154,8 @@ class _StorageSettingsPageState extends ConsumerState<StorageSettingsPage> {
         const Padding(
           padding: EdgeInsets.fromLTRB(4, 16, 4, 0),
           child: Text(
-            'All media, covers and tracks stay in the cloud and are '
-            'downloaded again when you need them.',
+            'Covers and recently played audio are retained locally. Clear a '
+            'category to download it again when you need it.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.4),
           ),

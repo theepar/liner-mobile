@@ -159,7 +159,8 @@ keyPassword=...
 
 ## Current Limitations
 
-- No background playback or notification controls yet.
+- Background playback, media notifications and lock-screen controls are
+  configured for Android and iOS; physical-device validation is still pending.
 - Deep links are parsed in-app, but device-level Android/iOS verification is pending.
 - The edge relay fallback uses HTTP; do not rely on it for sensitive credentials.
 - The app has no bundled `RequestSigner`, so the production gateway rejects sign-in.

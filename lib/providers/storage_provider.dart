@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../services/audio_cache.dart';
 import '../services/cover_image_cache.dart';
 import 'search_history_provider.dart';
 
@@ -9,16 +10,20 @@ final coverCacheProvider = Provider<DeviceCache>(
   (ref) => const CoverImageCache(),
 );
 
+final audioCacheProvider = Provider<DeviceCache>((ref) => const AudioCache());
+
 final storageProvider =
     StateNotifierProvider.autoDispose<StorageController, StorageState>(
       (ref) => StorageController(
         covers: ref.watch(coverCacheProvider),
+        audio: ref.watch(audioCacheProvider),
         history: ref.watch(searchHistoryProvider.notifier),
       ),
     );
 
 enum StorageCategory {
   covers('Cover Artwork', 'Album and artist images saved for faster loading'),
+  audio('Audio Cache', 'Tracks retained locally for faster replay'),
   searchHistory('Search History', 'Your recent searches on this device');
 
   const StorageCategory(this.label, this.description);
@@ -57,21 +62,27 @@ class StorageState {
 }
 
 class StorageController extends StateNotifier<StorageState> {
-  StorageController({required this._covers, required this._history})
-    : super(const StorageState()) {
+  StorageController({
+    required this._covers,
+    required this._audio,
+    required this._history,
+  }) : super(const StorageState()) {
     unawaited(refresh());
   }
 
   final DeviceCache _covers;
+  final DeviceCache _audio;
   final SearchHistoryNotifier _history;
 
   Future<void> refresh() async {
     await _history.loaded;
     final covers = await _covers.sizeBytes();
+    final audio = await _audio.sizeBytes();
     if (!mounted) return;
     state = StorageState(
       sizes: {
         StorageCategory.covers: covers,
+        StorageCategory.audio: audio,
         StorageCategory.searchHistory: _history.storedBytes,
       },
       isLoading: false,
@@ -83,6 +94,7 @@ class StorageController extends StateNotifier<StorageState> {
     state = state.copyWith(isClearing: true);
     try {
       if (categories.contains(StorageCategory.covers)) await _covers.clear();
+      if (categories.contains(StorageCategory.audio)) await _audio.clear();
       if (categories.contains(StorageCategory.searchHistory)) {
         await _history.clear();
       }

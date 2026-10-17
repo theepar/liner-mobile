@@ -13,6 +13,7 @@ import '../../widgets/dark_input.dart';
 import 'about_settings_page.dart';
 import 'appearance_settings_page.dart';
 import 'audio_settings_page.dart';
+import 'language_settings_page.dart';
 import 'playback_settings_page.dart';
 import 'settings_widgets.dart';
 import 'storage_settings_page.dart';
@@ -76,6 +77,13 @@ final settingsDestinations = <SettingsDestination>[
       for (final variant in BrandingVariant.values) variant.label,
       'Animated background',
     ],
+  ),
+  const SettingsDestination(
+    title: 'Language',
+    description: 'English, Russian or Ukrainian',
+    icon: Icons.language_rounded,
+    page: LanguageSettingsPage.new,
+    topics: ['Language', 'English', 'Russian', 'Ukrainian'],
   ),
   const SettingsDestination(
     title: 'Cache & Storage',
@@ -259,14 +267,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SettingsHeading('Preferences'),
               SettingsCard(
                 children: [
-                  for (final destination in settingsDestinations.take(3))
+                  for (final destination in settingsDestinations.take(4))
                     _DestinationTile(destination: destination),
                 ],
               ),
               const SettingsHeading('Application'),
               SettingsCard(
                 children: [
-                  for (final destination in settingsDestinations.skip(3))
+                  for (final destination in settingsDestinations.skip(4))
                     _DestinationTile(destination: destination),
                 ],
               ),

@@ -403,12 +403,16 @@ void main() {
       tester,
     ) async {
       final covers = _FakeCache(3 * 1024 * 1024);
+      final audio = _FakeCache(0);
       await openSettings(
         tester,
         preferences: {
           'liner_search_history': ['one', 'two'],
         },
-        overrides: [coverCacheProvider.overrideWithValue(covers)],
+        overrides: [
+          coverCacheProvider.overrideWithValue(covers),
+          audioCacheProvider.overrideWithValue(audio),
+        ],
       );
       await openPage(tester, 'Cache & Storage');
       await tester.runAsync(
@@ -433,9 +437,13 @@ void main() {
 
     testWidgets('only the ticked categories are cleared', (tester) async {
       final covers = _FakeCache(2048);
+      final audio = _FakeCache(0);
       await openSettings(
         tester,
-        overrides: [coverCacheProvider.overrideWithValue(covers)],
+        overrides: [
+          coverCacheProvider.overrideWithValue(covers),
+          audioCacheProvider.overrideWithValue(audio),
+        ],
       );
       await openPage(tester, 'Cache & Storage');
       await tester.runAsync(
@@ -452,6 +460,16 @@ void main() {
       );
       expect(covers.clears, 0);
     });
+  });
+
+  testWidgets('language choice is remembered', (tester) async {
+    await openSettings(tester);
+    await openPage(tester, 'Language');
+
+    await tester.tap(find.text('Русский'));
+    await tester.pumpAndSettle();
+
+    expect(await storedPreference('liner_locale'), 'russian');
   });
 
   group('about page', () {

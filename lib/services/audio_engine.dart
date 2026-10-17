@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart' as just_audio;
+
+import 'audio_cache.dart';
 
 abstract interface class AudioEngine {
   Stream<Duration> get positionStream;
@@ -28,10 +31,12 @@ class EngineState {
 }
 
 class JustAudioEngine implements AudioEngine {
-  JustAudioEngine([just_audio.AudioPlayer? player])
-    : _player = player ?? just_audio.AudioPlayer();
+  JustAudioEngine([just_audio.AudioPlayer? player, AudioCache? cache])
+    : _player = player ?? just_audio.AudioPlayer(),
+      _cache = cache ?? const AudioCache();
 
   final just_audio.AudioPlayer _player;
+  final AudioCache _cache;
 
   @override
   Stream<Duration> get positionStream => _player.positionStream;
@@ -57,7 +62,20 @@ class JustAudioEngine implements AudioEngine {
   bool get isPlaying => _player.playing;
 
   @override
-  Future<void> setUrl(String url) => _player.setUrl(url);
+  Future<void> setUrl(String url) async {
+    if (kIsWeb) {
+      await _player.setUrl(url);
+      return;
+    }
+    await _player.setAudioSource(
+      // just_audio's streaming cache is the only API that caches while playing.
+      // ignore: experimental_member_use
+      just_audio.LockCachingAudioSource(
+        Uri.parse(url),
+        cacheFile: await _cache.fileForUrl(url),
+      ),
+    );
+  }
 
   @override
   Future<void> play() => _player.play();

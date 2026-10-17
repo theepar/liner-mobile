@@ -10,6 +10,7 @@ import '../core/models/player_state.dart';
 import '../core/models/track.dart';
 import '../core/utils/uuid.dart';
 import 'audio_engine.dart';
+import 'background_audio_engine.dart';
 import 'lyrics_offset_store.dart';
 import 'lyrics_session.dart';
 import 'playback_telemetry.dart';
@@ -32,6 +33,9 @@ class AudioPlayerService {
       }),
       _engine.stateStream.listen(_onEngineState),
     ]);
+    if (_engine case final BackgroundAudioEngine background) {
+      background.bindQueueControls(onNext: next, onPrevious: previous);
+    }
   }
 
   final LinerApi _api;
@@ -117,6 +121,7 @@ class AudioPlayerService {
         currentIndex: _currentIndex,
       ),
     );
+    _syncBackgroundQueue();
     await _play(_queue[_currentIndex]);
   }
 
@@ -130,6 +135,7 @@ class AudioPlayerService {
     if (index < 0 || index >= _queue.length) return;
     _currentIndex = index;
     _emit(_currentState.copyWith(currentIndex: index));
+    _syncBackgroundQueue();
     await _play(_queue[index]);
   }
 
@@ -146,6 +152,9 @@ class AudioPlayerService {
         isLoadingLyrics: true,
       ),
     );
+    if (_engine case final BackgroundAudioEngine background) {
+      background.updateTrack(track);
+    }
     unawaited(_loadLyrics(track, requestId));
     _maybeTopUpRadio(track, requestId);
 
@@ -273,6 +282,13 @@ class AudioPlayerService {
         currentIndex: _currentIndex,
       ),
     );
+    _syncBackgroundQueue();
+  }
+
+  void _syncBackgroundQueue() {
+    if (_engine case final BackgroundAudioEngine background) {
+      background.updateQueue(List.unmodifiable(_queue), _currentIndex);
+    }
   }
 
   void _maybeTopUpRadio(Track seed, int requestId) {

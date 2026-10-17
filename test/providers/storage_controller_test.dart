@@ -23,6 +23,7 @@ class _FakeCache implements DeviceCache {
 
 void main() {
   late _FakeCache covers;
+  late _FakeCache audio;
   late ProviderContainer container;
 
   setUp(() {
@@ -30,8 +31,12 @@ void main() {
       'liner_search_history': ['abc', 'de'],
     });
     covers = _FakeCache(4096);
+    audio = _FakeCache(2048);
     container = ProviderContainer(
-      overrides: [coverCacheProvider.overrideWithValue(covers)],
+      overrides: [
+        coverCacheProvider.overrideWithValue(covers),
+        audioCacheProvider.overrideWithValue(audio),
+      ],
     );
     addTearDown(container.dispose);
   });
@@ -49,8 +54,9 @@ void main() {
     final state = await measured();
 
     expect(state.bytesOf(StorageCategory.covers), 4096);
+    expect(state.bytesOf(StorageCategory.audio), 2048);
     expect(state.bytesOf(StorageCategory.searchHistory), 5);
-    expect(state.totalBytes, 4101);
+    expect(state.totalBytes, 6149);
   });
 
   test('clears only the chosen categories', () async {
@@ -61,7 +67,9 @@ void main() {
     final state = container.read(storageProvider);
 
     expect(covers.clears, 1);
+    expect(audio.clears, 0);
     expect(state.bytesOf(StorageCategory.covers), 0);
+    expect(state.bytesOf(StorageCategory.audio), 2048);
     expect(state.bytesOf(StorageCategory.searchHistory), 5);
     expect(state.isClearing, isFalse);
   });
@@ -74,6 +82,7 @@ void main() {
     });
 
     expect(covers.clears, 0);
+    expect(audio.clears, 0);
     expect(container.read(searchHistoryProvider), isEmpty);
     expect(
       (await SharedPreferences.getInstance()).getStringList(

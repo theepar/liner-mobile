@@ -5,13 +5,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/models/playback_event.dart';
 import '../core/models/player_state.dart';
 import '../core/models/track.dart';
+import '../services/audio_engine.dart';
 import '../services/audio_player_service.dart';
 import 'api_provider.dart';
 import 'auth_provider.dart';
 import 'settings_provider.dart';
 
+final audioEngineProvider = Provider<AudioEngine>((_) => JustAudioEngine());
+
 final playerServiceProvider = Provider<AudioPlayerService>((ref) {
-  final service = AudioPlayerService(ref.watch(linerApiProvider));
+  final service = AudioPlayerService(
+    ref.watch(linerApiProvider),
+    engine: ref.watch(audioEngineProvider),
+  );
   ref.listen<bool>(
     settingsProvider.select((settings) => settings.autoplaySimilar),
     (_, enabled) => service.autoplaySimilar = enabled,
